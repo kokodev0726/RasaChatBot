@@ -247,22 +247,20 @@ export default function ChatInterface() {
                 disabled={sendMessageMutation.isPending}
               />
               
-              <div className="absolute right-3 bottom-2 flex items-center space-x-1">
+              <div className="absolute right-3 bottom-3 flex items-center space-x-1">
                 <VoiceInput onTranscription={handleVoiceInput} />
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Paperclip className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           </div>
-          
-          <Button
-            onClick={handleSendMessage}
-            disabled={!message.trim() || sendMessageMutation.isPending}
-            className="bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white h-11 w-11 p-0 rounded-full"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          <div className="relative pb-2">
+            <Button
+              onClick={handleSendMessage}
+              disabled={!message.trim() || sendMessageMutation.isPending}
+              className="bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white h-11 w-11 p-0 rounded-full"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -114,6 +114,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
       
+
+      await fetch('http://187.33.155.76:5005/webhooks/rest/webhook', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'charset': 'UTF-8',
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ "sender": "user", "message": content }),
+      });
+
       const message = await storage.createMessage({
         chatId,
         content,

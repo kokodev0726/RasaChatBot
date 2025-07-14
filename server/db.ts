@@ -1,32 +1,21 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import dotenv from 'dotenv';
-import * as schema from "@shared/schema";
+import * as schema from '@shared/schema';
 
 dotenv.config();
 
-
-neonConfig.webSocketConstructor = ws;
-
-console.log("sfdafasf");
-console.log( "Connecting to database at", process.env.DATABASE_URL);
-if (!process.env.DATABASE_URL) {
-  
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
-
-export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+const pool = new Pool({
+  host: '34.90.16.92',
+  port: 5432,
+  user: 'uy16jhvehgydq',
+  password: '81gm21x&1}e{',
+  database: 'dbwdverp4wjdfu',
+  ssl: false,
 });
-pool.connect().then(() => {
-  console.log("Database connection successful");
-}).catch((err) => {
-  console.error("Database connection failed:", err);
-});
-export const db = drizzle({ client: pool, schema });
+
+pool.connect()
+  .then(() => console.log('Database connection successful'))
+  .catch((err) => console.error('Database connection failed:', err));
+
+export const db = drizzle(pool, { schema });

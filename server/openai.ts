@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 import { Readable } from "stream";
+import dotenv from 'dotenv';
 
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+dotenv.config();
+
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY
 });

@@ -45,13 +45,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/chats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.id;
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized - missing user ID" });
+      }
+
       const { title } = insertChatSchema.parse(req.body);
       
       const chat = await storage.createChat({
-        userId,
+        userId: req.user.id,
         title,
       });
+
+
       
       res.json(chat);
     } catch (error) {

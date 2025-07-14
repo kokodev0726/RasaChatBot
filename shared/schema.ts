@@ -89,9 +89,11 @@ export type Message = typeof messages.$inferSelect;
 // Schemas
 export const insertChatSchema = createInsertSchema(chats).omit({
   id: true,
+  userId: true,  // Remove userId from required fields in request body
   createdAt: true,
   updatedAt: true,
 });
+
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,

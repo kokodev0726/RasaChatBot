@@ -58,6 +58,7 @@ export default function Sidebar() {
       if (response.ok) {
         queryClient.invalidateQueries(["/api/auth/user"]);
         setLocation("/");
+        window.location.reload();
       } else {
         toast({
           title: "Error",

@@ -241,7 +241,7 @@ export default function Auth() {
         <div className="hidden md:flex flex-col justify-center">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-4">
-              AI Chat Assistant
+              Rasa AI Chat Assistant
             </h1>
             <p className="text-xl text-slate-600 dark:text-slate-400 mb-8">
               Experience intelligent conversations with advanced AI technology

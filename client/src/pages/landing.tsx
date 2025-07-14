@@ -12,7 +12,7 @@ export default function Landing() {
             <Bot className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-5xl font-bold text-slate-800 dark:text-slate-200 mb-4">
-            AI Chat Assistant
+            Rasa AI Chat Assistant
           </h1>
           <p className="text-xl text-slate-600 dark:text-slate-400 mb-8 max-w-2xl mx-auto">
             Experience the future of conversation with our advanced AI assistant. 

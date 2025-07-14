@@ -176,7 +176,7 @@ export default function ChatInterface() {
             </Avatar>
             <div>
               <h2 className="font-semibold text-slate-800 dark:text-slate-200">
-                AI Assistant
+                Rasa AI Assistant
               </h2>
               <p className="text-xs text-emerald-500 flex items-center">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>

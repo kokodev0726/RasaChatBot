@@ -47,6 +47,9 @@ export default function Sidebar() {
     },
   });
 
+  // Fix for onError typing issue: use useQueryOptions type and cast
+  // Alternatively, move onError to useQuery's onError callback in options
+
   const handleSignOut = async () => {
     try {
       const response = await fetch("/api/logout", {

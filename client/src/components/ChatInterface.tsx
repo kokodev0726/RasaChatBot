@@ -41,6 +41,23 @@ export default function ChatInterface() {
     },
   });
 
+
+  // Sync localMessages with chat messages when chat changes
+  useEffect(() => {
+    if (chat?.messages) {
+      setLocalMessages(chat.messages);
+    }
+  }, [chat?.messages]);
+
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
+
+  // Sync localMessages with chat messages when chat changes
+  useEffect(() => {
+    if (chat?.messages) {
+      setLocalMessages(chat.messages);
+    }
+  }, [chat?.messages]);
+  
   const sendMessageMutation = useMutation({
     mutationFn: async (messageContent: string) => {
       if (!chatId) throw new Error("No chat selected");
@@ -81,7 +98,15 @@ export default function ChatInterface() {
       
       return fullResponse;
     },
-    onSuccess: () => {
+    onSuccess: (aiMessageContent: string) => {
+      // Add AI message to localMessages
+      const aiMessage: Message = {
+        id: Date.now(), // temporary id
+        role: "assistant",
+        content: aiMessageContent,
+        createdAt: new Date().toISOString(),
+      };
+      setLocalMessages((prev) => [...prev, aiMessage]);
       queryClient.invalidateQueries({ queryKey: ["/api/chats", chatId] });
       queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
     },
@@ -111,7 +136,16 @@ export default function ChatInterface() {
 
   const handleSendMessage = () => {
     if (!message.trim() || sendMessageMutation.isPending) return;
-    
+
+    // Add user message immediately to localMessages
+    const userMessage: Message = {
+      id: Date.now(), // temporary id
+      role: "user",
+      content: message,
+      createdAt: new Date().toISOString(),
+    };
+    setLocalMessages((prev) => [...prev, userMessage]);
+
     sendMessageMutation.mutate(message);
     setMessage("");
   };
@@ -184,21 +218,13 @@ export default function ChatInterface() {
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm">
-              <Download className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm">
-              <Share className="w-4 h-4" />
-            </Button>
-          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         <MessageList
-          messages={chat?.messages || []}
+          messages={localMessages}
           isLoading={isLoading}
           streamingMessage={streamingMessage}
           isStreaming={isStreaming}

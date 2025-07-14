@@ -47,6 +47,33 @@ export default function Sidebar() {
     },
   });
 
+  const handleSignOut = async () => {
+    try {
+      const response = await fetch("/api/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        queryClient.invalidateQueries(["/api/auth/user"]);
+        setLocation("/auth");
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to sign out",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to sign out",
+        variant: "destructive",
+      });
+    }
+  };
+
   const createChatMutation = useMutation({
     mutationFn: async (title: string) => {
       const response = await apiRequest("POST", "/api/chats", { title });
@@ -266,7 +293,7 @@ export default function Sidebar() {
       <div className="p-4 border-t border-slate-200 dark:border-slate-700">
           <Button
             variant="ghost"
-            onClick={() => setLocation("/auth")}
+            onClick={handleSignOut}
             className="w-full justify-start text-slate-600 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
           >
             <LogOut className="w-4 h-4 mr-2" />

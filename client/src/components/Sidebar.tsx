@@ -264,14 +264,14 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-        <Button
-          variant="ghost"
-          onClick={() => window.location.href = "/api/logout"}
-          className="w-full justify-start text-slate-600 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
-        </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setLocation("/auth")}
+            className="w-full justify-start text-slate-600 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
       </div>
     </div>
   );

@@ -116,8 +116,8 @@ export default function ChatInterface() {
       
       if (isUnauthorizedError(error)) {
         toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
+          title: "No autorizado",
+          description: "Has cerrado sesión. Iniciando sesión nuevamente...",
           variant: "destructive",
         });
         setTimeout(() => {
@@ -128,7 +128,7 @@ export default function ChatInterface() {
       
       toast({
         title: "Error",
-        description: "Failed to send message",
+        description: "No se pudo enviar el mensaje",
         variant: "destructive",
       });
     },
@@ -187,10 +187,10 @@ export default function ChatInterface() {
             <Bot className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">
-            Welcome to AI Chat
+            Bienvenido al chat de RASA AI
           </h2>
           <p className="text-slate-600 dark:text-slate-400 mb-6">
-            Select a chat from the sidebar or create a new one to get started.
+            Selecciona una conversación en la barra lateral o crea una nueva para comenzar.
           </p>
         </div>
       </div>
@@ -210,11 +210,11 @@ export default function ChatInterface() {
             </Avatar>
             <div>
               <h2 className="font-semibold text-slate-800 dark:text-slate-200">
-                Rasa AI Assistant
+                Asistente de Rasa AI
               </h2>
               <p className="text-xs text-emerald-500 flex items-center">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
-                Online
+                En línea
               </p>
             </div>
           </div>

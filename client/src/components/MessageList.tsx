@@ -133,7 +133,7 @@ export default function MessageList({
             </div>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 ml-4 mt-1 block">
-            Now
+            Ahora
           </span>
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function MessageList({
           <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-3 animate-pulse">
             <Bot className="w-4 h-4 text-white" />
           </div>
-          <p className="text-slate-600 dark:text-slate-400">Loading messages...</p>
+          <p className="text-slate-600 dark:text-slate-400">Cargando mensajes...</p>
         </div>
       </div>
     );
@@ -168,11 +168,11 @@ export default function MessageList({
           <div className="flex-1">
             <div className="bg-slate-100 dark:bg-slate-700 rounded-2xl rounded-tl-md p-4 max-w-3xl">
               <p className="text-slate-800 dark:text-slate-200">
-                Hello! I'm your AI assistant. I can help you with questions. How can I assist you today?
+                ¡Hola! Soy tu asistente de IA. Puedo ayudarte con tus preguntas. ¿Cómo puedo ayudarte hoy?
               </p>
             </div>
             <span className="text-xs text-slate-500 dark:text-slate-400 ml-4 mt-1 block">
-              Just now
+              En este momento
             </span>
           </div>
         </div>

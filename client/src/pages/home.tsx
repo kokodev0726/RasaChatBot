@@ -31,7 +31,7 @@ export default function Home() {
           <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-violet-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
             <div className="w-8 h-8 bg-white rounded-full"></div>
           </div>
-          <p className="text-slate-600 dark:text-slate-400">Loading...</p>
+          <p className="text-slate-600 dark:text-slate-400">Cargando...</p>
         </div>
       </div>
     );

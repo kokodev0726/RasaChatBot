@@ -241,10 +241,10 @@ export default function Auth() {
         <div className="hidden md:flex flex-col justify-center">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-4">
-              Rasa AI Chat Assistant
+              Asistente de chat con inteligencia artificial de Rasa
             </h1>
             <p className="text-xl text-slate-600 dark:text-slate-400 mb-8">
-              Experience intelligent conversations with advanced AI technology
+              Experimente conversaciones inteligentes con tecnología de IA avanzada
             </p>
             
             <div className="grid gap-6 max-w-md mx-auto">
@@ -254,10 +254,10 @@ export default function Auth() {
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-                    Smart Responses
+                    Respuestas inteligentes
                   </h3>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Get intelligent, context-aware answers instantly
+                    Obtenga respuestas inteligentes y contextuales al instante
                   </p>
                 </div>
               </div>
@@ -268,24 +268,10 @@ export default function Auth() {
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-                    Secure & Private
+                    Seguro y privado
                   </h3>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Your conversations are protected and private
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-violet-100 dark:bg-violet-900 rounded-full flex items-center justify-center">
-                  <Lock className="w-6 h-6 text-violet-600 dark:text-violet-400" />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-                    Always Available
-                  </h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    24/7 AI assistance whenever you need it
+                    Tus conversaciones están protegidas y privadas
                   </p>
                 </div>
               </div>

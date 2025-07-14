@@ -232,7 +232,7 @@ export default function Sidebar() {
           className="w-full bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white"
         >
           <Plus className="w-4 h-4 mr-2" />
-          New Chat
+            Nuevo chat
         </Button>
       </div>
 
@@ -256,7 +256,7 @@ export default function Sidebar() {
             <div className="text-center py-8">
               <MessageSquare className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-3" />
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                No chats yet. Start a new conversation!
+                Aún no hay chats. ¡Inicia una nueva conversación!
               </p>
             </div>
           ) : (
@@ -301,7 +301,7 @@ export default function Sidebar() {
             className="w-full justify-start text-slate-600 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
           >
             <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
+              Desconectar
           </Button>
       </div>
     </div>

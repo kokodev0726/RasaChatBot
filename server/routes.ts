@@ -115,7 +115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
 
-      await fetch('http://187.33.155.76:5005/webhooks/rest/webhook', {
+      await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

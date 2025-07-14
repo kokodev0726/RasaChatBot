@@ -22,7 +22,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
@@ -34,7 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Chat routes
   app.get('/api/chats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const chats = await storage.getUserChats(userId);
       res.json(chats);
     } catch (error) {
@@ -45,7 +45,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/chats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { title } = insertChatSchema.parse(req.body);
       
       const chat = await storage.createChat({
@@ -62,7 +62,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/chats/:chatId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
       
       const chat = await storage.getChatWithMessages(chatId);
@@ -85,7 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/chats/:chatId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
       
       await storage.deleteChat(chatId, userId);
@@ -99,7 +99,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Message routes
   app.post('/api/chats/:chatId/messages', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
       const { content, role } = insertMessageSchema.parse(req.body);
       
@@ -125,7 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Streaming chat completion
   app.post('/api/chats/:chatId/stream', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
       const { message } = z.object({ message: z.string() }).parse(req.body);
       

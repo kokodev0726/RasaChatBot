@@ -32,13 +32,13 @@ Preferred communication style: Simple, everyday language.
 ## Key Components
 
 ### Database Schema
-- **Users**: Stores user profile information (required for Replit Auth)
+- **Users**: Stores user profile information (required for OAuth)
 - **Chats**: Conversation containers with titles and timestamps
 - **Messages**: Individual chat messages with role (user/assistant) and content
-- **Sessions**: Session storage for authentication (required for Replit Auth)
+- **Sessions**: Session storage for authentication (required for OAuth)
 
 ### Authentication System
-- **Provider**: Replit Auth with OpenID Connect
+- **Provider**: OAuth 2.0 (Google and GitHub)
 - **Session Management**: PostgreSQL-based session storage
 - **Authorization**: Route-level protection for API endpoints
 

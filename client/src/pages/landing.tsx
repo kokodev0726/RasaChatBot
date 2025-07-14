@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Bot, MessageSquare, Mic, Zap } from "lucide-react";
+import { SiGoogle, SiGithub } from "react-icons/si";
 
 export default function Landing() {
   return (
@@ -17,13 +18,26 @@ export default function Landing() {
             Experience the future of conversation with our advanced AI assistant. 
             Get instant answers, creative solutions, and intelligent insights.
           </p>
-          <Button 
-            size="lg" 
-            className="bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white px-8 py-6 text-lg rounded-full"
-            onClick={() => window.location.href = '/api/login'}
-          >
-            Get Started
-          </Button>
+          <div className="flex flex-col space-y-4 max-w-md mx-auto">
+            <Button 
+              size="lg" 
+              className="bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white px-8 py-4 text-lg rounded-full flex items-center justify-center"
+              onClick={() => window.location.href = '/api/auth/google'}
+            >
+              <SiGoogle className="w-5 h-5 mr-3" />
+              Continue with Google
+            </Button>
+            
+            <Button 
+              size="lg" 
+              variant="outline"
+              className="border-2 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 px-8 py-4 text-lg rounded-full flex items-center justify-center"
+              onClick={() => window.location.href = '/api/auth/github'}
+            >
+              <SiGithub className="w-5 h-5 mr-3" />
+              Continue with GitHub
+            </Button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">

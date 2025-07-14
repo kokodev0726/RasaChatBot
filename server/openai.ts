@@ -64,8 +64,8 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
     const transcription = await openai.audio.transcriptions.create({
       file: audioStream as any,
-      model: "whisper-1", // Note: gpt-4o-mini-transcribe is not available, using whisper-1 which is the standard transcription model
-      language: "en",
+      model: "gpt-4o-mini-transcribe", // Note: gpt-4o-mini-transcribe is not available, using whisper-1 which is the standard transcription model
+      language: "es",
       response_format: "text",
     });
 

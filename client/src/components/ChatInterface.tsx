@@ -44,32 +44,23 @@ export default function ChatInterface() {
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
 
   // Sync localMessages with chat messages when chat changes
-  // useEffect(() => {
-  //   if (chat?.messages) {
-  //     setLocalMessages(chat.messages);
-  //   }
-  // }, [chat?.messages]);
-
-  const lastSpokenMessageId = useRef<number | null>(null);
+  useEffect(() => {
+    if (chat?.messages) {
+      setLocalMessages(chat.messages);
+    }
+  }, [chat?.messages]);
 
   // Play audio of bot response when a new assistant message is added
   useEffect(() => {
     if (localMessages.length === 0) return;
 
     const lastMessage = localMessages[localMessages.length - 1];
-    if (
-      lastMessage.role === "assistant" &&
-      typeof window !== "undefined" &&
-      window.speechSynthesis &&
-      lastMessage.id !== lastSpokenMessageId.current
-    ) {
+    if (lastMessage.role === "assistant" && typeof window !== "undefined" && window.speechSynthesis) {
       // Cancel any ongoing speech synthesis
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(lastMessage.content);
       window.speechSynthesis.speak(utterance);
-
-      lastSpokenMessageId.current = lastMessage.id;
     }
   }, [localMessages]);
 

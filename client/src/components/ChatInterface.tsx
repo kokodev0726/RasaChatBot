@@ -50,17 +50,26 @@ export default function ChatInterface() {
     }
   }, [chat?.messages]);
 
+  const lastSpokenMessageId = useRef<number | null>(null);
+
   // Play audio of bot response when a new assistant message is added
   useEffect(() => {
     if (localMessages.length === 0) return;
 
     const lastMessage = localMessages[localMessages.length - 1];
-    if (lastMessage.role === "assistant" && typeof window !== "undefined" && window.speechSynthesis) {
+    if (
+      lastMessage.role === "assistant" &&
+      typeof window !== "undefined" &&
+      window.speechSynthesis &&
+      lastMessage.id !== lastSpokenMessageId.current
+    ) {
       // Cancel any ongoing speech synthesis
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(lastMessage.content);
       window.speechSynthesis.speak(utterance);
+
+      lastSpokenMessageId.current = lastMessage.id;
     }
   }, [localMessages]);
 

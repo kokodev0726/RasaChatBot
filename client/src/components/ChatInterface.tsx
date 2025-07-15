@@ -44,11 +44,11 @@ export default function ChatInterface() {
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
 
   // Sync localMessages with chat messages when chat changes
-  useEffect(() => {
-    if (chat?.messages) {
-      setLocalMessages(chat.messages);
-    }
-  }, [chat?.messages]);
+  // useEffect(() => {
+  //   if (chat?.messages) {
+  //     setLocalMessages(chat.messages);
+  //   }
+  // }, [chat?.messages]);
 
   const lastSpokenMessageId = useRef<number | null>(null);
 

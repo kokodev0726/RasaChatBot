@@ -12,6 +12,15 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { embeddings } from '@shared/schema';
+import { sql } from 'drizzle-orm';
+
+const openai = new OpenAIEmbeddings({
+  modelName: 'text-embedding-3-small',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 
 // Interface for storage operations
 export interface IStorage {
@@ -31,6 +40,10 @@ export interface IStorage {
   // Message operations
   createMessage(message: InsertMessage): Promise<Message>;
   getChatMessages(chatId: number): Promise<Message[]>;
+  createEmbedding(userInput: string, bot_output: string, embedding: number[]): Promise<any>;
+  getSimilarEmbeddings(query: string, topN?: number): Promise<
+    { id: number; user_input: string; bot_output: string; distance: number }[]
+  >;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -141,6 +154,42 @@ export class DatabaseStorage implements IStorage {
       .where(eq(messages.chatId, chatId))
       .orderBy(messages.createdAt);
   }
+
+  async createEmbedding(userInput: string, bot_output: string): Promise<any> {
+    const embedding = await openai.embedQuery(userInput) as number[]; // ensure number[]
+    const [newEmbedding] = await db
+      .insert(embeddings)
+      .values({
+        user_input: userInput,
+        bot_output: bot_output,
+        embedding: embedding, // Store as number[] for pgvector
+      })
+      .returning();
+    return newEmbedding;
+  }
+
+  async getSimilarEmbeddings(query: string, topN = 5): Promise<{ id: number; user_input: string; bot_output: string; distance: number }[]> {
+    const queryEmbedding = await openai.embedQuery(query);
+    // Convert embedding array to Postgres vector literal string
+    const embeddingStr = `[${queryEmbedding.join(",")}]`;
+    const { rows } = await db.execute<{
+      id: number;
+      user_input: string;
+      bot_output: string;
+      distance: number;
+    }>(sql`
+      SELECT id,
+             user_input,
+             bot_output,
+             embedding <-> ${embeddingStr}::vector AS distance
+      FROM   embeddings
+      ORDER  BY embedding <-> ${embeddingStr}::vector ASC
+      LIMIT  ${topN}
+    `);
+  
+    return rows;
+  }
 }
+
 
 export const storage = new DatabaseStorage();

@@ -6,11 +6,11 @@ import * as schema from '@shared/schema';
 dotenv.config();
 
 const pool = new Pool({
-  host: '34.90.16.92',
-  port: 5432,
-  user: 'uy16jhvehgydq',
+  host: '187.33.153.208',
+  port: 3003,
+  user: 'rasaadmin',
   password: '81gm21x&1}e{',
-  database: 'dbwdverp4wjdfu',
+  database: 'rasa1db',
   ssl: false,
 });
 

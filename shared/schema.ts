@@ -8,6 +8,7 @@ import {
   serial,
   integer,
   boolean,
+  vector
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -75,6 +76,15 @@ export const messagesRelations = relations(messages, ({ one }) => ({
     references: [chats.id],
   }),
 }));
+
+
+export const embeddings = pgTable('embeddings', {
+  id: serial('id').primaryKey(),
+  user_input: text('user_input').notNull(),
+  bot_output: text('bot_output').notNull(),
+  embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+  created_at: timestamp('created_at').defaultNow(),
+});
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;

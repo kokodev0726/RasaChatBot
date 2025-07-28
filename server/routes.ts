@@ -201,6 +201,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           content: fullResponse,
           role: "assistant",
         });
+
+
+        await storage.createEmbedding(message, fullResponse);
         
         // Update chat title if this is the first message
         if (messages.length === 1) {

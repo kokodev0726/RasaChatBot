@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { storage } from './storage'; 
 import { Readable } from "stream";
 import dotenv from 'dotenv';
 
@@ -13,11 +14,50 @@ export interface ChatMessage {
   content: string;
 }
 
-export async function* streamChatCompletion(messages: ChatMessage[]): AsyncGenerator<string, void, unknown> {
+export async function* streamChatCompletion(
+  messages: ChatMessage[],
+  topK = 3
+): AsyncGenerator<string, void, unknown> {
   try {
+    /* -------------------------------------------------
+     * 1.  Build the user query from the last message
+     * -------------------------------------------------*/
+    const userQuery = messages.filter(m => m.role === 'user').pop()?.content ?? '';
+    if (!userQuery.trim()) throw new Error('No user message found');
+
+    /* -------------------------------------------------
+     * 2.  Retrieve semantically similar examples
+     * -------------------------------------------------*/
+    const similar = await storage.getSimilarEmbeddings(userQuery, topK);
+
+    const contextSnippets = similar
+      .map(
+        s =>
+          `User: ${s.user_input}\nAssistant: ${s.bot_output}`
+      )
+      .join('\n\n');
+
+    /* -------------------------------------------------
+     * 3.  Prepend system prompt with context
+     * -------------------------------------------------*/
+    const systemPrompt: ChatMessage = {
+      role: 'system',
+      content:
+        'You are a helpful assistant. Below are some past Q&A pairs that might be relevant. ' +
+        'If they help, use them. If not, ignore them. !IMPORTANT: Must be in spanish and short answers, and don\'t mention OpenAI, You are made by Rasa AI\n\n' +
+        '--- BEGIN EXAMPLES ---\n' +
+        contextSnippets +
+        '\n--- END EXAMPLES ---',
+    };
+
+    const messagesWithContext = [systemPrompt, ...messages];
+
+    /* -------------------------------------------------
+     * 4.  Stream the completion
+     * -------------------------------------------------*/
     const stream = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: messages,
+      model: 'gpt-4o',
+      messages: messagesWithContext,
       stream: true,
       max_tokens: 2000,
       temperature: 0.7,
@@ -25,13 +65,11 @@ export async function* streamChatCompletion(messages: ChatMessage[]): AsyncGener
 
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        yield content;
-      }
+      if (content) yield content;
     }
   } catch (error) {
-    console.error("OpenAI streaming error:", error);
-    throw new Error("Failed to generate AI response");
+    console.error('OpenAI streaming error:', error);
+    throw new Error('Failed to generate AI response');
   }
 }
 
@@ -39,7 +77,13 @@ export async function getChatCompletion(messages: ChatMessage[]): Promise<string
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
-      messages: messages,
+      messages: [
+        {
+          role: "system",
+          content: "Response shortly, but smartly, must in spanish"
+        },
+        ...messages
+      ],
       max_tokens: 2000,
       temperature: 0.7,
     });

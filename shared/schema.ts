@@ -86,6 +86,24 @@ export const embeddings = pgTable('embeddings', {
   created_at: timestamp('created_at').defaultNow(),
 });
 
+// User context table for storing user information across chats
+export const userContext = pgTable('user_context', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id').notNull().references(() => users.id),
+  contextKey: varchar('context_key').notNull(), // e.g., 'name', 'preferences', 'interests'
+  contextValue: text('context_value').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Relations
+export const userContextRelations = relations(userContext, ({ one }) => ({
+  user: one(users, {
+    fields: [userContext.userId],
+    references: [users.id],
+  }),
+}));
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -95,6 +113,9 @@ export type Chat = typeof chats.$inferSelect;
 
 export type InsertMessage = typeof messages.$inferInsert;
 export type Message = typeof messages.$inferSelect;
+
+export type InsertUserContext = typeof userContext.$inferInsert;
+export type UserContext = typeof userContext.$inferSelect;
 
 // Schemas
 export const insertChatSchema = createInsertSchema(chats).omit({

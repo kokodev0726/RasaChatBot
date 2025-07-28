@@ -2,6 +2,7 @@ import {
   users,
   chats,
   messages,
+  userContext,
   type User,
   type UpsertUser,
   type Chat,
@@ -9,6 +10,8 @@ import {
   type Message,
   type InsertMessage,
   type ChatWithMessages,
+  type InsertUserContext,
+  type UserContext,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -45,6 +48,11 @@ export interface IStorage {
   getSimilarEmbeddings(query: string, topN?: number): Promise<
     { id: number; user_input: string; bot_output: string; distance: number }[]
   >;
+  
+  // User context operations
+  setUserContext(userId: string, key: string, value: string): Promise<void>;
+  getUserContext(userId: string, key: string): Promise<string | null>;
+  getAllUserContext(userId: string): Promise<{ key: string; value: string }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -196,6 +204,33 @@ export class DatabaseStorage implements IStorage {
     `);
   
     return rows;
+  }
+
+  // User context operations
+  async setUserContext(userId: string, key: string, value: string): Promise<void> {
+    await db
+      .insert(userContext)
+      .values({ userId, contextKey: key, contextValue: value })
+      .onConflictDoUpdate({
+        target: [userContext.userId, userContext.contextKey],
+        set: { contextValue: value, updatedAt: new Date() },
+      });
+  }
+
+  async getUserContext(userId: string, key: string): Promise<string | null> {
+    const [context] = await db
+      .select()
+      .from(userContext)
+      .where(and(eq(userContext.userId, userId), eq(userContext.contextKey, key)));
+    return context?.contextValue || null;
+  }
+
+  async getAllUserContext(userId: string): Promise<{ key: string; value: string }[]> {
+    const contexts = await db
+      .select()
+      .from(userContext)
+      .where(eq(userContext.userId, userId));
+    return contexts.map(ctx => ({ key: ctx.contextKey, value: ctx.contextValue }));
   }
 }
 

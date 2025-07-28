@@ -16,6 +16,7 @@ export interface ChatMessage {
 
 export async function* streamChatCompletion(
   messages: ChatMessage[],
+  userId: string,
   topK = 3
 ): AsyncGenerator<string, void, unknown> {
   try {
@@ -38,7 +39,15 @@ export async function* streamChatCompletion(
       .join('\n\n');
 
     /* -------------------------------------------------
-     * 3.  Prepend system prompt with context
+     * 3.  Get user context information
+     * -------------------------------------------------*/
+    const userContexts = await storage.getAllUserContext(userId);
+    const userContextInfo = userContexts.length > 0 
+      ? `\n--- USER CONTEXT ---\n${userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join('\n')}\n--- END USER CONTEXT ---\n`
+      : '';
+
+    /* -------------------------------------------------
+     * 4.  Prepend system prompt with context
      * -------------------------------------------------*/
     const systemPrompt: ChatMessage = {
       role: 'system',
@@ -47,13 +56,14 @@ export async function* streamChatCompletion(
         'If they help, use them. If not, ignore them. !IMPORTANT: Must be in spanish and short answers, and don\'t mention OpenAI, You are made by Rasa AI\n\n' +
         '--- BEGIN EXAMPLES ---\n' +
         contextSnippets +
-        '\n--- END EXAMPLES ---',
+        '\n--- END EXAMPLES ---' +
+        userContextInfo,
     };
 
     const messagesWithContext = [systemPrompt, ...messages];
 
     /* -------------------------------------------------
-     * 4.  Stream the completion
+     * 5.  Stream the completion
      * -------------------------------------------------*/
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -141,5 +151,35 @@ export async function generateChatTitle(messages: ChatMessage[]): Promise<string
   } catch (error) {
     console.error("OpenAI title generation error:", error);
     return "New Chat";
+  }
+}
+
+export async function extractAndStoreUserInfo(message: string, userId: string): Promise<void> {
+  try {
+    // Simple extraction patterns for common user information
+    const namePattern = /(?:me llamo|mi nombre es|soy|me llaman)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
+    const agePattern = /(?:tengo|mi edad es|soy de)\s+(\d+)\s+(?:años|año)/i;
+    const locationPattern = /(?:vivo en|soy de|estoy en)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s,]+)/i;
+    const professionPattern = /(?:soy|trabajo como|mi profesión es|me dedico a)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
+
+    const nameMatch = message.match(namePattern);
+    const ageMatch = message.match(agePattern);
+    const locationMatch = message.match(locationPattern);
+    const professionMatch = message.match(professionPattern);
+
+    if (nameMatch) {
+      await storage.setUserContext(userId, 'name', nameMatch[1].trim());
+    }
+    if (ageMatch) {
+      await storage.setUserContext(userId, 'age', ageMatch[1].trim());
+    }
+    if (locationMatch) {
+      await storage.setUserContext(userId, 'location', locationMatch[1].trim());
+    }
+    if (professionMatch) {
+      await storage.setUserContext(userId, 'profession', professionMatch[1].trim());
+    }
+  } catch (error) {
+    console.error('Error extracting user info:', error);
   }
 }

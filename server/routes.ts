@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { streamChatCompletion, transcribeAudio, generateChatTitle } from "./openai";
+import { streamChatCompletion, transcribeAudio, generateChatTitle, extractAndStoreUserInfo } from "./openai";
 import { insertChatSchema, insertMessageSchema } from "@shared/schema";
 import multer from "multer";
 import { z } from "zod";
@@ -170,6 +170,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "user",
       });
       
+      // Extract and store user information
+      await extractAndStoreUserInfo(message, userId);
+      
       // Prepare messages for OpenAI
       const messages = chat.messages.map(msg => ({
         role: msg.role as "user" | "assistant",
@@ -190,7 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       try {
         // Stream the response
-        for await (const chunk of streamChatCompletion(messages)) {
+        for await (const chunk of streamChatCompletion(messages, userId)) {
           fullResponse += chunk;
           res.write(chunk);
         }

@@ -57,7 +57,10 @@ export async function* streamChatCompletion(
         '--- BEGIN EXAMPLES ---\n' +
         contextSnippets +
         '\n--- END EXAMPLES ---' +
-        userContextInfo,
+        userContextInfo +
+        '\n\nIMPORTANTE: Si tienes información del usuario (nombre, edad, ubicación, profesión), úsala en tus respuestas. ' +
+        'Si el usuario pregunta sobre su información personal y la tienes, responde con ella. ' +
+        'Si no tienes la información que pregunta, pídele que te la proporcione.',
     };
 
     const messagesWithContext = [systemPrompt, ...messages];
@@ -156,28 +159,56 @@ export async function generateChatTitle(messages: ChatMessage[]): Promise<string
 
 export async function extractAndStoreUserInfo(message: string, userId: string): Promise<void> {
   try {
-    // Simple extraction patterns for common user information
-    const namePattern = /(?:me llamo|mi nombre es|soy|me llaman)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
-    const agePattern = /(?:tengo|mi edad es|soy de)\s+(\d+)\s+(?:años|año)/i;
-    const locationPattern = /(?:vivo en|soy de|estoy en)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s,]+)/i;
-    const professionPattern = /(?:soy|trabajo como|mi profesión es|me dedico a)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
+    // Spanish extraction patterns
+    const spanishNamePattern = /(?:me llamo|mi nombre es|soy|me llaman)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
+    const spanishAgePattern = /(?:tengo|mi edad es|soy de)\s+(\d+)\s+(?:años|año)/i;
+    const spanishLocationPattern = /(?:vivo en|soy de|estoy en)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s,]+)/i;
+    const spanishProfessionPattern = /(?:soy|trabajo como|mi profesión es|me dedico a)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
 
-    const nameMatch = message.match(namePattern);
-    const ageMatch = message.match(agePattern);
-    const locationMatch = message.match(locationPattern);
-    const professionMatch = message.match(professionPattern);
+    // English extraction patterns
+    const englishNamePattern = /(?:my name is|i'm|i am|call me|i'm called)\s+([A-Za-z\s]+)/i;
+    const englishAgePattern = /(?:i'm|i am|my age is)\s+(\d+)\s+(?:years? old|years?)/i;
+    const englishLocationPattern = /(?:i live in|i'm from|i'm in|i live at)\s+([A-Za-z\s,]+)/i;
+    const englishProfessionPattern = /(?:i'm a|i am a|i work as|my job is|i work in)\s+([A-Za-z\s]+)/i;
 
-    if (nameMatch) {
-      await storage.setUserContext(userId, 'name', nameMatch[1].trim());
+    // Check Spanish patterns
+    const spanishNameMatch = message.match(spanishNamePattern);
+    const spanishAgeMatch = message.match(spanishAgePattern);
+    const spanishLocationMatch = message.match(spanishLocationPattern);
+    const spanishProfessionMatch = message.match(spanishProfessionPattern);
+
+    // Check English patterns
+    const englishNameMatch = message.match(englishNamePattern);
+    const englishAgeMatch = message.match(englishAgePattern);
+    const englishLocationMatch = message.match(englishLocationPattern);
+    const englishProfessionMatch = message.match(englishProfessionPattern);
+
+    // Store name (prioritize Spanish, then English)
+    if (spanishNameMatch) {
+      await storage.setUserContext(userId, 'name', spanishNameMatch[1].trim());
+    } else if (englishNameMatch) {
+      await storage.setUserContext(userId, 'name', englishNameMatch[1].trim());
     }
-    if (ageMatch) {
-      await storage.setUserContext(userId, 'age', ageMatch[1].trim());
+
+    // Store age
+    if (spanishAgeMatch) {
+      await storage.setUserContext(userId, 'age', spanishAgeMatch[1].trim());
+    } else if (englishAgeMatch) {
+      await storage.setUserContext(userId, 'age', englishAgeMatch[1].trim());
     }
-    if (locationMatch) {
-      await storage.setUserContext(userId, 'location', locationMatch[1].trim());
+
+    // Store location
+    if (spanishLocationMatch) {
+      await storage.setUserContext(userId, 'location', spanishLocationMatch[1].trim());
+    } else if (englishLocationMatch) {
+      await storage.setUserContext(userId, 'location', englishLocationMatch[1].trim());
     }
-    if (professionMatch) {
-      await storage.setUserContext(userId, 'profession', professionMatch[1].trim());
+
+    // Store profession
+    if (spanishProfessionMatch) {
+      await storage.setUserContext(userId, 'profession', spanishProfessionMatch[1].trim());
+    } else if (englishProfessionMatch) {
+      await storage.setUserContext(userId, 'profession', englishProfessionMatch[1].trim());
     }
   } catch (error) {
     console.error('Error extracting user info:', error);

@@ -208,7 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Update chat title if this is the first message
         if (messages.length === 1) {
           const title = await generateChatTitle(messages);
-          // Update chat title in database (you might want to add this method to storage)
+          await storage.updateChatTitle(chatId, title);
         }
         
         res.end();

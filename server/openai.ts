@@ -45,6 +45,10 @@ export async function* streamChatCompletion(
     const userContextInfo = userContexts.length > 0 
       ? `\n--- USER CONTEXT ---\n${userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join('\n')}\n--- END USER CONTEXT ---\n`
       : '';
+    
+    console.log(`🔍 Retrieved user context for ${userId}:`, userContexts.length > 0 ? userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join(', ') : 'No context found');
+    console.log(`📝 User context info length: ${userContextInfo.length} characters`);
+    console.log(`📝 User context info: ${userContextInfo}`);
 
     /* -------------------------------------------------
      * 4.  Prepend system prompt with context
@@ -58,9 +62,20 @@ export async function* streamChatCompletion(
         contextSnippets +
         '\n--- END EXAMPLES ---' +
         userContextInfo +
-        '\n\nIMPORTANTE: Si tienes información del usuario (nombre, edad, ubicación, profesión), úsala en tus respuestas. ' +
+        '\n\nIMPORTANTE: Si tienes información del usuario (nombre, edad, ubicación, profesión, etc.), úsala en tus respuestas. ' +
         'Si el usuario pregunta sobre su información personal y la tienes, responde con ella. ' +
-        'Si no tienes la información que pregunta, pídele que te la proporcione.',
+        'Si no tienes la información que pregunta, pídele que te la proporcione.\n\n' +
+        'REGLAS IMPORTANTES:\n' +
+        '1. NO preguntes "¿Puedo ayudarte con algo más?" o "¿Hay algo más en lo que pueda ayudarte?"\n' +
+        '2. NO hagas preguntas de seguimiento innecesarias\n' +
+        '3. Da respuestas directas y concisas\n' +
+        '4. Solo responde a lo que el usuario pregunta específicamente\n' +
+        '5. SIEMPRE usa la información del usuario que tienes disponible cuando te preguntan sobre ella\n' +
+        '6. Si el usuario pregunta "¿cuál es mi nombre/edad/trabajo/etc?" y tienes esa información, responde con ella\n' +
+        '7. La información del usuario está en la sección USER CONTEXT arriba - úsala siempre que sea relevante\n' +
+        '8. Personaliza tus respuestas usando la información del usuario cuando sea apropiado\n' +
+        '9. Si el usuario menciona información personal, almacénala para futuras conversaciones\n' +
+        '10. Sé proactivo en usar la información del usuario para hacer las respuestas más personalizadas',
     };
 
     const messagesWithContext = [systemPrompt, ...messages];
@@ -159,58 +174,98 @@ export async function generateChatTitle(messages: ChatMessage[]): Promise<string
 
 export async function extractAndStoreUserInfo(message: string, userId: string): Promise<void> {
   try {
-    // Spanish extraction patterns
-    const spanishNamePattern = /(?:me llamo|mi nombre es|soy|me llaman)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
-    const spanishAgePattern = /(?:tengo|mi edad es|soy de)\s+(\d+)\s+(?:años|año)/i;
-    const spanishLocationPattern = /(?:vivo en|soy de|estoy en)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s,]+)/i;
-    const spanishProfessionPattern = /(?:soy|trabajo como|mi profesión es|me dedico a)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i;
+    console.log(`🔍 Analyzing message for personal info: "${message}"`);
+    
+    // First, try specific patterns for common information
+    const specificPatterns = {
+      // Name patterns
+      name: [
+        /(?:my name is|i'm|i am|call me|i'm called)\s+([A-Za-z\s]+)/i,
+        /(?:me llamo|mi nombre es|soy|me llaman)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i
+      ],
+      // Age patterns
+      age: [
+        /(?:i'm|i am|my age is)\s+(\d+)\s*(?:years? old|years?|y\.?o\.?)/i,
+        /(?:tengo|mi edad es|soy de)\s+(\d+)\s+(?:años|año)/i,
+        /(?:i am|i'm)\s+(\d+)/i
+      ],
+      // Location patterns
+      location: [
+        /(?:i live in|i'm from|i'm in|i live at)\s+([A-Za-z\s,]+)/i,
+        /(?:vivo en|soy de|estoy en)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s,]+)/i
+      ],
+      // Job/Profession patterns
+      job: [
+        /(?:i'm a|i am a|i work as|my job is|i work in)\s+([A-Za-z\s]+)/i,
+        /(?:soy|trabajo como|mi profesión es|me dedico a)\s+([A-Za-zÁáÉéÍíÓóÚúÑñ\s]+)/i,
+        /(?:job|work|profession|occupation):\s*([A-Za-z\s]+)/i
+      ]
+    };
 
-    // English extraction patterns
-    const englishNamePattern = /(?:my name is|i'm|i am|call me|i'm called)\s+([A-Za-z\s]+)/i;
-    const englishAgePattern = /(?:i'm|i am|my age is)\s+(\d+)\s+(?:years? old|years?)/i;
-    const englishLocationPattern = /(?:i live in|i'm from|i'm in|i live at)\s+([A-Za-z\s,]+)/i;
-    const englishProfessionPattern = /(?:i'm a|i am a|i work as|my job is|i work in)\s+([A-Za-z\s]+)/i;
+    let extractedInfo = [];
 
-    // Check Spanish patterns
-    const spanishNameMatch = message.match(spanishNamePattern);
-    const spanishAgeMatch = message.match(spanishAgePattern);
-    const spanishLocationMatch = message.match(spanishLocationPattern);
-    const spanishProfessionMatch = message.match(spanishProfessionPattern);
-
-    // Check English patterns
-    const englishNameMatch = message.match(englishNamePattern);
-    const englishAgeMatch = message.match(englishAgePattern);
-    const englishLocationMatch = message.match(englishLocationPattern);
-    const englishProfessionMatch = message.match(englishProfessionPattern);
-
-    // Store name (prioritize Spanish, then English)
-    if (spanishNameMatch) {
-      await storage.setUserContext(userId, 'name', spanishNameMatch[1].trim());
-    } else if (englishNameMatch) {
-      await storage.setUserContext(userId, 'name', englishNameMatch[1].trim());
+    // Try specific patterns first
+    for (const [key, patterns] of Object.entries(specificPatterns)) {
+      for (const pattern of patterns) {
+        const match = message.match(pattern);
+        if (match) {
+          const value = match[1].trim();
+          await storage.setUserContext(userId, key, value);
+          extractedInfo.push(`${key}: ${value}`);
+          console.log(`✅ Extracted ${key}: ${value} for user ${userId}`);
+          break; // Use first match for each key
+        }
+      }
     }
 
-    // Store age
-    if (spanishAgeMatch) {
-      await storage.setUserContext(userId, 'age', spanishAgeMatch[1].trim());
-    } else if (englishAgeMatch) {
-      await storage.setUserContext(userId, 'age', englishAgeMatch[1].trim());
+    // Now extract any other personal information using a more flexible approach
+    // Look for key-value pairs like "age: 25", "hobby: football", etc.
+    const keyValuePattern = /(\w+):\s*([^,\n]+)/gi;
+    let keyValueMatch;
+    
+    while ((keyValueMatch = keyValuePattern.exec(message)) !== null) {
+      const key = keyValueMatch[1].toLowerCase().trim();
+      const value = keyValueMatch[2].trim();
+      
+      // Skip if we already extracted this key with specific patterns
+      if (!extractedInfo.some(info => info.startsWith(`${key}:`))) {
+        await storage.setUserContext(userId, key, value);
+        extractedInfo.push(`${key}: ${value}`);
+        console.log(`✅ Extracted key-value: ${key}: ${value} for user ${userId}`);
+      }
     }
 
-    // Store location
-    if (spanishLocationMatch) {
-      await storage.setUserContext(userId, 'location', spanishLocationMatch[1].trim());
-    } else if (englishLocationMatch) {
-      await storage.setUserContext(userId, 'location', englishLocationMatch[1].trim());
+    // Also look for natural language statements about personal information
+    const naturalLanguagePatterns = [
+      // "I am X years old" -> age
+      { pattern: /(?:i am|i'm)\s+(\d+)\s*(?:years? old|years?)/i, key: 'age' },
+      // "I have X children" -> family
+      { pattern: /(?:i have|i've got)\s+(\d+)\s*(?:children|kids|sons|daughters)/i, key: 'family' },
+      // "I like X" -> hobby
+      { pattern: /(?:i like|i love|i enjoy)\s+([A-Za-z\s]+)/i, key: 'hobby' },
+      // "I am X" (personality traits)
+      { pattern: /(?:i am|i'm)\s+(?:a\s+)?([A-Za-z\s]+)(?:\s+person|$)/i, key: 'personality' }
+    ];
+
+    for (const { pattern, key } of naturalLanguagePatterns) {
+      const match = message.match(pattern);
+      if (match) {
+        const value = match[1].trim();
+        // Only store if we don't already have this key
+        if (!extractedInfo.some(info => info.startsWith(`${key}:`))) {
+          await storage.setUserContext(userId, key, value);
+          extractedInfo.push(`${key}: ${value}`);
+          console.log(`✅ Extracted natural language ${key}: ${value} for user ${userId}`);
+        }
+      }
     }
 
-    // Store profession
-    if (spanishProfessionMatch) {
-      await storage.setUserContext(userId, 'profession', spanishProfessionMatch[1].trim());
-    } else if (englishProfessionMatch) {
-      await storage.setUserContext(userId, 'profession', englishProfessionMatch[1].trim());
+    if (extractedInfo.length > 0) {
+      console.log(`📝 Stored user context for ${userId}: ${extractedInfo.join(', ')}`);
+    } else {
+      console.log(`📝 No personal information extracted from message`);
     }
   } catch (error) {
-    console.error('Error extracting user info:', error);
+    console.error('❌ Error extracting user info:', error);
   }
 }

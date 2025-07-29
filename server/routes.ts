@@ -171,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Extract and store user information
-      await extractAndStoreUserInfo(message, userId);
+      // await extractAndStoreUserInfo(message, userId);
       
       // Prepare messages for OpenAI
       const messages = chat.messages.map(msg => ({

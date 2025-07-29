@@ -23,23 +23,24 @@ export default function ChatInterface() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: chat, isLoading } = useQuery<ChatWithMessages>({
+  const { data: chat, isLoading, error } = useQuery<ChatWithMessages>({
     queryKey: ["/api/chats", chatId],
     enabled: !!chatId,
-    onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-    },
   });
+
+  // Handle query errors
+  useEffect(() => {
+    if (error && isUnauthorizedError(error)) {
+      toast({
+        title: "Unauthorized",
+        description: "You are logged out. Logging in again...",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+    }
+  }, [error, toast]);
 
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
 
@@ -47,8 +48,9 @@ export default function ChatInterface() {
   useEffect(() => {
     if (chat?.messages) {
       setLocalMessages(chat.messages);
+      setMessage(""); // Reset input box when switching chats
     }
-  }, [chat?.messages]);
+  }, [chatId, chat?.messages]);
 
   // Play audio of bot response when a new assistant message is added
   useEffect(() => {
@@ -110,10 +112,11 @@ export default function ChatInterface() {
         id: Date.now(), // temporary id
         role: "assistant",
         content: aiMessageContent,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
+        chatId: parseInt(chatId!),
       };
       setLocalMessages((prev) => [...prev, aiMessage]);
-      queryClient.invalidateQueries({ queryKey: ["/api/chats", chatId] });
+      // Only invalidate the chats list, not the current chat to avoid refresh
       queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
     },
     onError: (error: Error) => {
@@ -148,7 +151,8 @@ export default function ChatInterface() {
       id: Date.now(), // temporary id
       role: "user",
       content: message,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      chatId: parseInt(chatId!),
     };
     setLocalMessages((prev) => [...prev, userMessage]);
 

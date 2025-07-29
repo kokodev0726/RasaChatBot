@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,22 +30,28 @@ export default function Sidebar() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: chats, isLoading } = useQuery<Chat[]>({
+  // Extract current chat ID from location
+  const currentChatId = location.startsWith('/chat/') 
+    ? parseInt(location.split('/chat/')[1]) 
+    : null;
+
+  const { data: chats, isLoading, error } = useQuery<Chat[]>({
     queryKey: ["/api/chats"],
-    onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-    },
   });
+
+  // Handle query errors
+  useEffect(() => {
+    if (error && isUnauthorizedError(error)) {
+      toast({
+        title: "Unauthorized",
+        description: "You are logged out. Logging in again...",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+    }
+  }, [error, toast]);
 
   // Fix for onError typing issue: use useQueryOptions type and cast
   // Alternatively, move onError to useQuery's onError callback in options
@@ -59,7 +65,7 @@ export default function Sidebar() {
         },
       });
       if (response.ok) {
-        queryClient.invalidateQueries(["/api/auth/user"]);
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
         setLocation("/");
         window.location.reload();
       } else {
@@ -162,8 +168,9 @@ export default function Sidebar() {
     return "U";
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
+  const formatTimestamp = (timestamp: Date | string | null) => {
+    if (!timestamp) return '';
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -260,35 +267,54 @@ export default function Sidebar() {
               </p>
             </div>
           ) : (
-            chats?.map((chat) => (
-              <div
-                key={chat.id}
-                onClick={() => {
-                  setLocation(`/chat/${chat.id}`);
-                  setIsMobileOpen(false);
-                }}
-                className="p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h5 className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                      {chat.title}
-                    </h5>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {formatTimestamp(chat.updatedAt!)}
-                    </span>
+            chats?.map((chat) => {
+              const isActive = currentChatId === chat.id;
+              return (
+                <div
+                  key={chat.id}
+                  onClick={() => {
+                    setLocation(`/chat/${chat.id}`);
+                    setIsMobileOpen(false);
+                  }}
+                  className={`p-3 rounded-lg cursor-pointer transition-colors group ${
+                    isActive
+                      ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700"
+                      : "hover:bg-slate-50 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h5 className={`font-medium truncate ${
+                        isActive
+                          ? "text-blue-700 dark:text-blue-300"
+                          : "text-slate-800 dark:text-slate-200"
+                      }`}>
+                        {chat.title}
+                      </h5>
+                      <span className={`text-xs ${
+                        isActive
+                          ? "text-blue-500 dark:text-blue-400"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}>
+                        {formatTimestamp(chat.updatedAt!)}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => handleDeleteChat(chat.id, e)}
+                      className={`h-6 w-6 p-0 transition-all ${
+                        isActive
+                          ? "opacity-100 text-blue-500 hover:text-red-500"
+                          : "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-500"
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => handleDeleteChat(chat.id, e)}
-                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-red-500 transition-all"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

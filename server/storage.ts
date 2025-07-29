@@ -184,7 +184,7 @@ export class DatabaseStorage implements IStorage {
     return newEmbedding;
   }
 
-  async getSimilarEmbeddings(query: string, topN = 5): Promise<{ id: number; user_input: string; bot_output: string; distance: number }[]> {
+  async getSimilarEmbeddings(query: string, topN = 10): Promise<{ id: number; user_input: string; bot_output: string; distance: number }[]> {
     const queryEmbedding = await openai.embedQuery(query);
     // Convert embedding array to Postgres vector literal string
     const embeddingStr = `[${queryEmbedding.join(",")}]`;

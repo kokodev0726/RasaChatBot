@@ -17,7 +17,7 @@ export interface ChatMessage {
 export async function* streamChatCompletion(
   messages: ChatMessage[],
   userId: string,
-  topK = 3
+  topK = 10
 ): AsyncGenerator<string, void, unknown> {
   try {
     /* -------------------------------------------------
@@ -38,17 +38,19 @@ export async function* streamChatCompletion(
       )
       .join('\n\n');
 
+    console.log(contextSnippets);
+
     /* -------------------------------------------------
      * 3.  Get user context information
      * -------------------------------------------------*/
-    const userContexts = await storage.getAllUserContext(userId);
-    const userContextInfo = userContexts.length > 0 
-      ? `\n--- USER CONTEXT ---\n${userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join('\n')}\n--- END USER CONTEXT ---\n`
-      : '';
+    // const userContexts = await storage.getAllUserContext(userId);
+    // const userContextInfo = userContexts.length > 0 
+    //   ? `\n--- USER CONTEXT ---\n${userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join('\n')}\n--- END USER CONTEXT ---\n`
+    //   : '';
     
-    console.log(`🔍 Retrieved user context for ${userId}:`, userContexts.length > 0 ? userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join(', ') : 'No context found');
-    console.log(`📝 User context info length: ${userContextInfo.length} characters`);
-    console.log(`📝 User context info: ${userContextInfo}`);
+    // console.log(`🔍 Retrieved user context for ${userId}:`, userContexts.length > 0 ? userContexts.map(ctx => `${ctx.key}: ${ctx.value}`).join(', ') : 'No context found');
+    // console.log(`📝 User context info length: ${userContextInfo.length} characters`);
+    // console.log(`📝 User context info: ${userContextInfo}`);
 
     /* -------------------------------------------------
      * 4.  Prepend system prompt with context
@@ -57,25 +59,10 @@ export async function* streamChatCompletion(
       role: 'system',
       content:
         'You are a helpful assistant. Below are some past Q&A pairs that might be relevant. ' +
-        'If they help, use them. If not, ignore them. !IMPORTANT: Must be in spanish and short answers, and don\'t mention OpenAI, You are made by Rasa AI\n\n' +
-        '--- BEGIN EXAMPLES ---\n' +
+        'If they help, use them. If not, ignore them. !IMPORTANT: Must be in spanish and short answers, and don\'t mention OpenAI, You are made by Rasa AI, And Do not ask like what can I help you at the end of the conversation\n\n' +
+        '--- BEGIN Relevant Q&A ---\n' +
         contextSnippets +
-        '\n--- END EXAMPLES ---' +
-        userContextInfo +
-        '\n\nIMPORTANTE: Si tienes información del usuario (nombre, edad, ubicación, profesión, etc.), úsala en tus respuestas. ' +
-        'Si el usuario pregunta sobre su información personal y la tienes, responde con ella. ' +
-        'Si no tienes la información que pregunta, pídele que te la proporcione.\n\n' +
-        'REGLAS IMPORTANTES:\n' +
-        '1. NO preguntes "¿Puedo ayudarte con algo más?" o "¿Hay algo más en lo que pueda ayudarte?"\n' +
-        '2. NO hagas preguntas de seguimiento innecesarias\n' +
-        '3. Da respuestas directas y concisas\n' +
-        '4. Solo responde a lo que el usuario pregunta específicamente\n' +
-        '5. SIEMPRE usa la información del usuario que tienes disponible cuando te preguntan sobre ella\n' +
-        '6. Si el usuario pregunta "¿cuál es mi nombre/edad/trabajo/etc?" y tienes esa información, responde con ella\n' +
-        '7. La información del usuario está en la sección USER CONTEXT arriba - úsala siempre que sea relevante\n' +
-        '8. Personaliza tus respuestas usando la información del usuario cuando sea apropiado\n' +
-        '9. Si el usuario menciona información personal, almacénala para futuras conversaciones\n' +
-        '10. Sé proactivo en usar la información del usuario para hacer las respuestas más personalizadas',
+        '\n--- END RelevantQ&A ---'
     };
 
     const messagesWithContext = [systemPrompt, ...messages];

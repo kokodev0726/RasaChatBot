@@ -17,7 +17,7 @@ export interface ChatMessage {
 export async function* streamChatCompletion(
   messages: ChatMessage[],
   userId: string,
-  topK = 10
+  topK = 7
 ): AsyncGenerator<string, void, unknown> {
   try {
     /* -------------------------------------------------
@@ -29,7 +29,7 @@ export async function* streamChatCompletion(
     /* -------------------------------------------------
      * 2.  Retrieve semantically similar examples
      * -------------------------------------------------*/
-    const similar = await storage.getSimilarEmbeddings(userQuery, topK);
+    const similar = await storage.getSimilarEmbeddings(userId, userQuery, topK);
 
     const contextSnippets = similar
       .map(
@@ -58,11 +58,14 @@ export async function* streamChatCompletion(
     const systemPrompt: ChatMessage = {
       role: 'system',
       content:
-        'You are a helpful assistant. Below are some past Q&A pairs that might be relevant. ' +
-        'If they help, use them. If not, ignore them. !IMPORTANT: Must be in spanish and short answers, and don\'t mention OpenAI, You are made by Rasa AI, And Do not ask like what can I help you at the end of the conversation\n\n' +
-        '--- BEGIN Relevant Q&A ---\n' +
+        'Eres un asistente útil. A continuación, hay algunas preguntas y respuestas previas que podrían ser relevantes. ' +
+        'Encuentra la información necesaria en las Q&A y utilízala para responder de manera precisa. ¡IMPORTANTE! Debes responder siempre en español con respuestas cortas, ' +
+        'y nunca mencionar OpenAI, ni que fuiste creado por Rasa AI. Además, no debes preguntar "¿En qué puedo ayudarte hoy?" al final de la conversación.\n\n' +
+        'Si la información ya ha sido proporcionada, úsala directamente para una respuesta precisa. Si el usuario menciona datos como su nombre, edad, ubicación o cualquier otra ' +
+        'información relevante, responde directamente con esos detalles de forma clara y concisa. No dudes en hacer uso de toda la información previa disponible.\n\n' +
+        '--- INICIO de preguntas y respuestas relevantes ---\n' +
         contextSnippets +
-        '\n--- END RelevantQ&A ---'
+        '\n--- FIN de preguntas y respuestas relevantes ---'
     };
 
     const messagesWithContext = [systemPrompt, ...messages];

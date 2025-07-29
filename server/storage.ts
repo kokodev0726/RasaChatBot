@@ -44,8 +44,8 @@ export interface IStorage {
   // Message operations
   createMessage(message: InsertMessage): Promise<Message>;
   getChatMessages(chatId: number): Promise<Message[]>;
-  createEmbedding(userInput: string, bot_output: string, embedding: number[]): Promise<any>;
-  getSimilarEmbeddings(query: string, topN?: number): Promise<
+  createEmbedding(userId: string, userInput: string, bot_output: string): Promise<any>;
+  getSimilarEmbeddings(userId: string, query: string, topN?: number): Promise<
     { id: number; user_input: string; bot_output: string; distance: number }[]
   >;
   
@@ -171,7 +171,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(messages.createdAt);
   }
 
-  async createEmbedding(userInput: string, bot_output: string): Promise<any> {
+  async createEmbedding(userId: string, userInput: string, bot_output: string): Promise<any> {
     const embedding = await openai.embedQuery(userInput) as number[]; // ensure number[]
     const [newEmbedding] = await db
       .insert(embeddings)
@@ -179,12 +179,13 @@ export class DatabaseStorage implements IStorage {
         user_input: userInput,
         bot_output: bot_output,
         embedding: embedding, // Store as number[] for pgvector
+        userId: userId, // Store userId
       })
       .returning();
     return newEmbedding;
   }
 
-  async getSimilarEmbeddings(query: string, topN = 10): Promise<{ id: number; user_input: string; bot_output: string; distance: number }[]> {
+  async getSimilarEmbeddings(userId: string, query: string, topN = 10): Promise<{ id: number; user_input: string; bot_output: string; distance: number }[]> {
     const queryEmbedding = await openai.embedQuery(query);
     // Convert embedding array to Postgres vector literal string
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
@@ -199,10 +200,11 @@ export class DatabaseStorage implements IStorage {
              bot_output,
              embedding <-> ${embeddingStr}::vector AS distance
       FROM   embeddings
+      WHERE  user_id = ${userId}
       ORDER  BY embedding <-> ${embeddingStr}::vector ASC
       LIMIT  ${topN}
     `);
-  
+
     return rows;
   }
 

@@ -84,6 +84,7 @@ export const embeddings = pgTable('embeddings', {
   bot_output: text('bot_output').notNull(),
   embedding: vector('embedding', { dimensions: 1536 }).notNull(),
   created_at: timestamp('created_at').defaultNow(),
+  userId: varchar('user_id').notNull().references(() => users.id), // NEW FIELD
 });
 
 // User context table for storing user information across chats

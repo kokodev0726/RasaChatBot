@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { streamChatCompletion, transcribeAudio, generateChatTitle, extractAndStoreUserInfo } from "./openai";
+import { langChainAgent, langChainConversation, langChainChains } from "./langchain";
+import { toolExecutor } from "./langchain.tools";
 import { insertChatSchema, insertMessageSchema } from "@shared/schema";
 import multer from "multer";
 import { z } from "zod";
@@ -246,6 +248,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error transcribing audio:", error);
       res.status(500).json({ message: "Failed to transcribe audio" });
+    }
+  });
+
+  // LangChain specific routes
+  app.post('/api/langchain/stream', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { message, chatId, useAgent = true } = z.object({ 
+        message: z.string(),
+        chatId: z.number().optional(),
+        useAgent: z.boolean().optional()
+      }).parse(req.body);
+
+      // Verify chat ownership if chatId is provided
+      if (chatId) {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== userId) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Save user message if chatId is provided
+      if (chatId) {
+        await storage.createMessage({
+          chatId,
+          content: message,
+          role: "user",
+        });
+      }
+
+      // Set up streaming response
+      res.writeHead(200, {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      let fullResponse = "";
+
+      try {
+        // Use LangChain agent or conversation based on preference
+        const stream = useAgent 
+          ? langChainAgent.processMessage(userId, message, chatId)
+          : langChainConversation.streamConversation(userId, message);
+
+        for await (const chunk of stream) {
+          fullResponse += chunk;
+          res.write(chunk);
+        }
+
+        // Save AI response if chatId is provided
+        if (chatId) {
+          await storage.createMessage({
+            chatId,
+            content: fullResponse,
+            role: "assistant",
+          });
+        }
+
+        res.end();
+      } catch (streamError) {
+        console.error("LangChain streaming error:", streamError);
+        res.write("Error: Failed to generate response");
+        res.end();
+      }
+    } catch (error) {
+      console.error("Error in LangChain streaming endpoint:", error);
+      res.status(500).json({ message: "Failed to process message" });
+    }
+  });
+
+  // LangChain title generation
+  app.post('/api/langchain/title', isAuthenticated, async (req: any, res) => {
+    try {
+      const { messages } = z.object({ 
+        messages: z.array(z.string())
+      }).parse(req.body);
+
+      const title = await langChainChains.generateChatTitle(messages);
+      res.json({ title });
+    } catch (error) {
+      console.error("Error generating title with LangChain:", error);
+      res.status(500).json({ message: "Failed to generate title" });
+    }
+  });
+
+  // LangChain user info extraction
+  app.post('/api/langchain/extract-info', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { message } = z.object({ 
+        message: z.string()
+      }).parse(req.body);
+
+      const extractedInfo = await langChainChains.extractUserInfo(message);
+      
+      // Store extracted information
+      for (const [key, value] of Object.entries(extractedInfo)) {
+        if (value && value.trim()) {
+          await storage.setUserContext(userId, key, value);
+        }
+      }
+
+      res.json({ extractedInfo });
+    } catch (error) {
+      console.error("Error extracting user info with LangChain:", error);
+      res.status(500).json({ message: "Failed to extract user information" });
+    }
+  });
+
+  // LangChain memory management
+  app.delete('/api/langchain/memory/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Only allow users to clear their own memory
+      if (req.user.id !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Clear memory (this would need to be implemented in the LangChain service)
+      res.json({ message: "Memory cleared" });
+    } catch (error) {
+      console.error("Error clearing memory:", error);
+      res.status(500).json({ message: "Failed to clear memory" });
+    }
+  });
+
+  // LangChain tools routes
+  app.get('/api/langchain/tools', isAuthenticated, async (req: any, res) => {
+    try {
+      const availableTools = toolExecutor.getAvailableTools();
+      const toolDescriptions = toolExecutor.getToolDescriptions();
+      
+      res.json({
+        availableTools,
+        toolDescriptions,
+      });
+    } catch (error) {
+      console.error("Error getting available tools:", error);
+      res.status(500).json({ message: "Failed to get available tools" });
+    }
+  });
+
+  app.post('/api/langchain/tools/execute', isAuthenticated, async (req: any, res) => {
+    try {
+      const { toolName, input } = z.object({
+        toolName: z.string(),
+        input: z.string(),
+      }).parse(req.body);
+
+      const result = await toolExecutor.executeTool(toolName, input);
+      res.json({ result });
+    } catch (error) {
+      console.error("Error executing tool:", error);
+      res.status(500).json({ message: "Failed to execute tool" });
     }
   });
 

@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
+import { useLangChain } from "@/contexts/LangChainContext";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
@@ -16,7 +17,8 @@ import {
   MessageSquare, 
   Trash2,
   Menu,
-  X
+  X,
+  Zap
 } from "lucide-react";
 import type { Chat } from "@shared/schema";
 
@@ -29,6 +31,7 @@ export default function Sidebar() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { config: langChainConfig, isConnected } = useLangChain();
 
   // Extract current chat ID from location
   const currentChatId = location.startsWith('/chat/') 
@@ -220,9 +223,20 @@ export default function Sidebar() {
                 <Moon className="h-4 w-4" />
               )}
             </Button>
+            {langChainConfig.enabled && isConnected && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-blue-500"
+                title="LangChain Active"
+              >
+                <Zap className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setLocation('/settings')}
               className="h-8 w-8 p-0"
             >
               <Settings className="h-4 w-4" />

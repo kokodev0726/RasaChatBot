@@ -93,18 +93,49 @@ export class LangChainConversation {
     });
   }
 
-  async* streamConversation(userId: string, message: string): AsyncGenerator<string> {
-    const chain = await this.createConversationChain(userId);
+  async createConversationChainWithContext(userId: string, contextSnippets: string): Promise<ConversationChain> {
+    const memory = this.memoryManager.getMemory(userId);
     
+    // Replace the context placeholder with actual context
+    const systemPromptWithContext = config.systemPrompt.replace('{context}', contextSnippets);
+    
+    const prompt = ChatPromptTemplate.fromMessages([
+      SystemMessagePromptTemplate.fromTemplate(systemPromptWithContext),
+      HumanMessagePromptTemplate.fromTemplate("{input}"),
+    ]);
+
+    return new ConversationChain({
+      llm,
+      memory,
+      prompt,
+    });
+  }
+
+  async* streamConversation(userId: string, message: string): AsyncGenerator<string> {
     try {
-      const response = await chain.stream({
+      // Get similar conversations for context
+      const similarEmbeddings = await storage.getSimilarEmbeddings(userId, message, 3);
+      const contextSnippets = similarEmbeddings
+        .map(s => `Usuario: ${s.user_input}\nAsistente: ${s.bot_output}`)
+        .join('\n\n');
+
+      // Use the same prompt as OpenAI with context
+      const systemPromptWithContext = config.systemPrompt.replace('{context}', contextSnippets);
+      
+      const prompt = ChatPromptTemplate.fromMessages([
+        SystemMessagePromptTemplate.fromTemplate(systemPromptWithContext),
+        HumanMessagePromptTemplate.fromTemplate("{input}"),
+      ]);
+
+      const chain = prompt.pipe(llm).pipe(new StringOutputParser());
+
+      // Stream the response
+      const stream = await chain.stream({
         input: message,
       });
 
-      for await (const chunk of response) {
-        if (chunk.response) {
-          yield chunk.response;
-        }
+      for await (const chunk of stream) {
+        yield chunk;
       }
     } catch (error) {
       console.error('LangChain conversation error:', error);
@@ -259,16 +290,11 @@ export class LangChainAgent {
         .map(s => `Usuario: ${s.user_input}\nAsistente: ${s.bot_output}`)
         .join('\n\n');
 
-      // Create enhanced prompt with context
+      // Create enhanced prompt with context using the same prompt as OpenAI
+      const systemPromptWithContext = config.systemPrompt.replace('{context}', contextSnippets);
+      
       const enhancedPrompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(
-          `Eres un asistente conversacional útil y natural. Responde en español.
-          
-          Contexto de conversaciones similares:
-          ${contextSnippets}
-          
-          Usa este contexto para dar respuestas más relevantes y personalizadas.`
-        ),
+        SystemMessagePromptTemplate.fromTemplate(systemPromptWithContext),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
 

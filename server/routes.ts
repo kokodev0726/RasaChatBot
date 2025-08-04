@@ -152,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
+      const rasa_response = await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -160,8 +160,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'charset': 'UTF-8',
         },
         credentials: "same-origin",
-        body: JSON.stringify({ "sender": "user", "message": message }),
+        body: JSON.stringify({
+          "sender": "user",  // or any unique sender id you want
+          "message": message,
+          "metadata": {
+            "user_id": userId  // pass the actual UUID here
+          }
+        }),
       });
+
+      console.log(rasa_response);
       
       // Save user message
       await storage.createMessage({

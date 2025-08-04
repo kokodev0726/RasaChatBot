@@ -10,9 +10,22 @@ import { Settings, Zap, Brain, Wrench, Info } from 'lucide-react';
 
 export default function LangChainSettings() {
   const { config, updateConfig, isConnected, availableTools, toolDescriptions } = useLangChain();
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const handleToggle = (key: keyof typeof config) => {
     updateConfig({ [key]: !config[key] });
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Force a page reload to refresh the context
+      window.location.reload();
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
@@ -36,9 +49,20 @@ export default function LangChainSettings() {
                 {isConnected ? 'Connected' : 'Disconnected'}
               </span>
             </div>
-            <Badge variant={isConnected ? 'default' : 'secondary'}>
-              {isConnected ? 'Active' : 'Inactive'}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={isConnected ? 'default' : 'secondary'}>
+                {isConnected ? 'Active' : 'Inactive'}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="h-8"
+              >
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

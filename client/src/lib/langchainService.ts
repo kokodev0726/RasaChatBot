@@ -145,28 +145,49 @@ export class LangChainService {
 
   // Get available LangChain tools
   static async getAvailableTools(): Promise<LangChainToolsResponse> {
-    const response = await apiRequest('GET', '/api/langchain/tools');
-    return await response.json();
+    try {
+      const response = await fetch('/api/langchain/tools', {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error getting available tools:', error);
+      return {
+        availableTools: [],
+        toolDescriptions: {}
+      };
+    }
   }
 
   // Execute a LangChain tool
   static async executeTool(toolName: string, input: string): Promise<string> {
-    const response = await apiRequest('POST', '/api/langchain/tools/execute', {
-      toolName,
-      input,
-    });
-    
-    const data = await response.json();
-    return data.result;
+    try {
+      const response = await fetch('/api/langchain/tools/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ toolName, input }),
+      });
+      
+      const data = await response.json();
+      return data.result;
+    } catch (error) {
+      console.error('Error executing tool:', error);
+      throw new Error('Failed to execute tool');
+    }
   }
 
   // Test LangChain connection
   static async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch('/api/langchain/tools', {
+      const response = await fetch('/api/langchain/test-connection', {
         credentials: 'include',
       });
-      return response.ok;
+      const data = await response.json();
+      return data.connected;
     } catch {
       return false;
     }

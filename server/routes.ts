@@ -509,6 +509,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // LangChain connection test
+  app.get('/api/langchain/test-connection', isAuthenticated, async (req: any, res) => {
+    try {
+      // Test if LangChain components are working
+      const testMessage = "Test connection";
+      const testUserId = req.user.id;
+      
+      // Try to generate a simple response
+      let responseChunks = [];
+      for await (const chunk of langChainAgent.processMessage(testUserId, testMessage)) {
+        responseChunks.push(chunk);
+      }
+      
+      const response = responseChunks.join('');
+      
+      if (response && response.length > 0) {
+        res.json({ 
+          connected: true, 
+          message: 'LangChain is working properly',
+          testResponse: response.substring(0, 100) + '...'
+        });
+      } else {
+        res.json({ 
+          connected: false, 
+          message: 'LangChain is not responding properly' 
+        });
+      }
+    } catch (error) {
+      console.error('Error testing LangChain connection:', error);
+      res.json({ 
+        connected: false, 
+        message: 'LangChain connection failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

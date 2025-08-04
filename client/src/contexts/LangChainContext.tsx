@@ -35,17 +35,27 @@ export function LangChainProvider({ children }: LangChainProviderProps) {
   useEffect(() => {
     const checkConnection = async () => {
       try {
+        console.log('Checking LangChain connection...');
         const connected = await LangChainService.testConnection();
+        console.log('Connection result:', connected);
         setIsConnected(connected);
 
         if (connected) {
+          console.log('Loading available tools...');
           const tools = await LangChainService.getAvailableTools();
-          setAvailableTools(tools.availableTools);
-          setToolDescriptions(tools.toolDescriptions);
+          console.log('Tools loaded:', tools);
+          setAvailableTools(tools.availableTools || []);
+          setToolDescriptions(tools.toolDescriptions || {});
+        } else {
+          console.log('LangChain not connected, clearing tools');
+          setAvailableTools([]);
+          setToolDescriptions({});
         }
       } catch (error) {
         console.error('Error checking LangChain connection:', error);
         setIsConnected(false);
+        setAvailableTools([]);
+        setToolDescriptions({});
       }
     };
 

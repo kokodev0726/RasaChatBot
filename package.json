@@ -11,7 +11,8 @@
     "db:push": "drizzle-kit push",
     "test:langchain": "tsx server/langchain.test.ts",
     "test:langchain-backend": "node server/test-langchain.js",
-    "test:langchain-prompt": "node server/test-prompt.js"
+    "test:langchain-prompt": "node server/test-prompt.js",
+    "test:settings": "node client/src/test-settings.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

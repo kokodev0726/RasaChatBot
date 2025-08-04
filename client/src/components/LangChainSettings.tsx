@@ -68,7 +68,7 @@ export default function LangChainSettings() {
       </Card>
 
       {/* Main Configuration */}
-      <Card>
+      {/*<Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
@@ -79,7 +79,7 @@ export default function LangChainSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Enable LangChain */}
+          
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-sm font-medium">Enable LangChain</div>
@@ -96,7 +96,7 @@ export default function LangChainSettings() {
 
           <Separator />
 
-          {/* Use Agent */}
+          
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-sm font-medium">Use AI Agent</div>
@@ -113,7 +113,7 @@ export default function LangChainSettings() {
 
           <Separator />
 
-          {/* Auto Extract Info */}
+          
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-sm font-medium">Auto Extract Info</div>
@@ -130,7 +130,7 @@ export default function LangChainSettings() {
 
           <Separator />
 
-          {/* Enable Tools */}
+          
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-sm font-medium">Enable Tools</div>
@@ -145,7 +145,7 @@ export default function LangChainSettings() {
             />
           </div>
         </CardContent>
-      </Card>
+      </Card>*/}
 
       {/* Available Tools */}
       {config.enableTools && availableTools.length > 0 && (

@@ -79,7 +79,8 @@ export default function ChatInterface() {
       // Use LangChain if enabled and connected, otherwise fall back to OpenAI
       if (langChainConfig.enabled && isConnected) {
         return new Promise<string>((resolve, reject) => {
-          LangChainService.streamConversation(
+          // Use the dedicated LangChain chat endpoint for better integration
+          LangChainService.streamLangChainChat(
             messageContent,
             (chunk) => {
               setStreamingMessage(prev => prev + chunk);
@@ -95,7 +96,8 @@ export default function ChatInterface() {
               reject(error);
             },
             parseInt(chatId),
-            langChainConfig.useAgent
+            langChainConfig.useAgent,
+            langChainConfig.autoExtractInfo
           );
         });
       } else {

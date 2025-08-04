@@ -108,25 +108,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
-      const { content, role } = insertMessageSchema.parse(req.body);
+      const { content, role, useLangChain = true } = insertMessageSchema.extend({
+        useLangChain: z.boolean().optional()
+      }).parse(req.body);
       
       // Verify chat ownership
       const chat = await storage.getChat(chatId);
       if (!chat || chat.userId !== userId) {
         return res.status(403).json({ message: "Access denied" });
       }
-      
 
-      await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'charset': 'UTF-8',
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({ "sender": "user", "message": content }),
-      });
+      // If this is a user message and LangChain is enabled, we might want to process it
+      if (role === "user" && useLangChain) {
+        // Extract user information using LangChain
+        const extractedInfo = await langChainChains.extractUserInfo(content);
+        for (const [key, value] of Object.entries(extractedInfo)) {
+          if (value && value.trim()) {
+            await storage.setUserContext(userId, key, value);
+          }
+        }
+      }
+
+      // For assistant messages, we might want to use LangChain to generate them
+      if (role === "assistant" && useLangChain) {
+        // This would typically be handled by the streaming endpoint
+        // But we can add LangChain processing here if needed
+      }
 
       const message = await storage.createMessage({
         chatId,
@@ -141,12 +148,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Streaming chat completion
+  // Streaming chat completion with LangChain
   app.post('/api/chats/:chatId/stream', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
-      const { message } = z.object({ message: z.string() }).parse(req.body);
+      const { message, useLangChain = true } = z.object({ 
+        message: z.string(),
+        useLangChain: z.boolean().optional()
+      }).parse(req.body);
       
       // Verify chat ownership
       const chat = await storage.getChatWithMessages(chatId);
@@ -154,43 +164,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const rasa_response = await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'charset': 'UTF-8',
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          "sender": "user",  // or any unique sender id you want
-          "message": message,
-          "metadata": {
-            "user_id": userId  // pass the actual UUID here
-          }
-        }),
-      });
-
-      console.log(rasa_response);
-      
       // Save user message
       await storage.createMessage({
         chatId,
         content: message,
         role: "user",
       });
-      
-      // Extract and store user information
-      // await extractAndStoreUserInfo(message, userId);
-      
-      // Prepare messages for OpenAI
-      const messages = chat.messages.map(msg => ({
-        role: msg.role as "user" | "assistant",
-        content: msg.content,
-      }));
-      
-      // Add new user message
-      messages.push({ role: "user", content: message });
       
       // Set up streaming response
       res.writeHead(200, {
@@ -202,10 +181,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let fullResponse = "";
       
       try {
-        // Stream the response
-        for await (const chunk of streamChatCompletion(messages, userId)) {
-          fullResponse += chunk;
-          res.write(chunk);
+        if (useLangChain) {
+          // Use LangChain for response generation
+          const stream = langChainAgent.processMessage(userId, message, chatId);
+          
+          for await (const chunk of stream) {
+            fullResponse += chunk;
+            res.write(chunk);
+          }
+        } else {
+          // Fallback to OpenAI
+          const rasa_response = await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'charset': 'UTF-8',
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              "sender": "user",
+              "message": message,
+              "metadata": {
+                "user_id": userId
+              }
+            }),
+          });
+
+          console.log(rasa_response);
+          
+          // Prepare messages for OpenAI
+          const messages = chat.messages.map(msg => ({
+            role: msg.role as "user" | "assistant",
+            content: msg.content,
+          }));
+          
+          // Add new user message
+          messages.push({ role: "user", content: message });
+          
+          // Stream the response using OpenAI
+          for await (const chunk of streamChatCompletion(messages, userId)) {
+            fullResponse += chunk;
+            res.write(chunk);
+          }
         }
         
         // Save AI response
@@ -215,12 +233,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: "assistant",
         });
 
-
+        // Create embedding for future reference
         await storage.createEmbedding(userId, message, fullResponse);
         
         // Update chat title if this is the first message
-        if (messages.length === 1) {
-          const title = await generateChatTitle(messages);
+        if (chat.messages.length === 0) {
+          const title = useLangChain 
+            ? await langChainChains.generateChatTitle([message])
+            : await generateChatTitle([{ role: "user", content: message }]);
           await storage.updateChatTitle(chatId, title);
         }
         
@@ -315,6 +335,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       console.error("Error in LangChain streaming endpoint:", error);
+      res.status(500).json({ message: "Failed to process message" });
+    }
+  });
+
+  // LangChain-only chat endpoint (for when you want to force LangChain usage)
+  app.post('/api/langchain/chat', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { message, chatId, useAgent = true, extractInfo = true } = z.object({ 
+        message: z.string(),
+        chatId: z.number().optional(),
+        useAgent: z.boolean().optional(),
+        extractInfo: z.boolean().optional()
+      }).parse(req.body);
+
+      // Verify chat ownership if chatId is provided
+      if (chatId) {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== userId) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Save user message if chatId is provided
+      if (chatId) {
+        await storage.createMessage({
+          chatId,
+          content: message,
+          role: "user",
+        });
+      }
+
+      // Extract user information if enabled
+      if (extractInfo) {
+        const extractedInfo = await langChainChains.extractUserInfo(message);
+        for (const [key, value] of Object.entries(extractedInfo)) {
+          if (value && value.trim()) {
+            await storage.setUserContext(userId, key, value);
+          }
+        }
+      }
+
+      // Set up streaming response
+      res.writeHead(200, {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      let fullResponse = "";
+
+      try {
+        // Always use LangChain for this endpoint
+        const stream = useAgent 
+          ? langChainAgent.processMessage(userId, message, chatId)
+          : langChainConversation.streamConversation(userId, message);
+
+        for await (const chunk of stream) {
+          fullResponse += chunk;
+          res.write(chunk);
+        }
+
+        // Save AI response if chatId is provided
+        if (chatId) {
+          await storage.createMessage({
+            chatId,
+            content: fullResponse,
+            role: "assistant",
+          });
+
+          // Create embedding for future reference
+          await storage.createEmbedding(userId, message, fullResponse);
+        }
+
+        res.end();
+      } catch (streamError) {
+        console.error("LangChain chat error:", streamError);
+        res.write("Error: Failed to generate response");
+        res.end();
+      }
+    } catch (error) {
+      console.error("Error in LangChain chat endpoint:", error);
       res.status(500).json({ message: "Failed to process message" });
     }
   });

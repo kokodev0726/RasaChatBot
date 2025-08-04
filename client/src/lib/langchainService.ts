@@ -94,6 +94,35 @@ export class LangChainService {
     );
   }
 
+  // Stream conversation with LangChain-only endpoint
+  static async streamLangChainChat(
+    message: string,
+    onChunk: (chunk: string) => void,
+    onComplete: (fullResponse: string) => void,
+    onError: (error: Error) => void,
+    chatId?: number,
+    useAgent: boolean = true,
+    extractInfo: boolean = true
+  ) {
+    const data: any = {
+      message,
+      useAgent,
+      extractInfo,
+    };
+
+    if (chatId) {
+      data.chatId = chatId;
+    }
+
+    await this.streamResponse(
+      '/api/langchain/chat',
+      data,
+      onChunk,
+      onComplete,
+      onError
+    );
+  }
+
   // Generate chat title with LangChain
   static async generateTitle(messages: string[]): Promise<string> {
     const response = await apiRequest('POST', '/api/langchain/title', {

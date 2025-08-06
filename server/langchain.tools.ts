@@ -203,15 +203,24 @@ export const extractRelationshipsTool = new DynamicTool({
         return "Invalid format. Expected: userId:text containing relationships";
       }
       
-      const relationshipPrompt = `Extrae las relaciones entre personas o entidades del siguiente texto.
+      const relationshipPrompt = `Extrae todas las relaciones familiares o personales mencionadas en el siguiente texto.
+      
+      INSTRUCCIONES IMPORTANTES:
+      - Si el texto menciona "mi esposa", "mi hermano", etc., considera "mi/yo" como entity1 con valor "me" o "yo"
+      - Captura cualquier información sobre nombres, relaciones familiares, amistades, etc.
+      - Sé exhaustivo y detecta todas las relaciones posibles, incluso las indirectas o sutiles
+      - Normaliza los nombres (sin apodos ni diminutivos)
+      
       Responde en formato JSON con un array de objetos que contengan:
-      - entity1: La primera entidad
-      - relationship: La relación de entity1 hacia entity2
+      - entity1: La primera entidad (usa "me" o "yo" para referencias al hablante)
+      - relationship: La relación de entity1 hacia entity2 (esposo, esposa, hermano, hermana, hijo, hija, madre, padre, etc.)
       - entity2: La segunda entidad
 
-      Por ejemplo, si el texto dice "María es la madre de Juan", el resultado sería:
-      [{"entity1":"María","relationship":"madre","entity2":"Juan"}]
-
+      EJEMPLOS:
+      - "Mi esposa se llama Isabel" → [{"entity1":"yo","relationship":"esposo","entity2":"Isabel"}]
+      - "Tengo dos hermanos. Óscar y Raúl" → [{"entity1":"yo","relationship":"hermano","entity2":"Óscar"},{"entity1":"yo","relationship":"hermano","entity2":"Raúl"}]
+      - "Mi madre tiene 83 años y se llama Encarnación" → [{"entity1":"yo","relationship":"hijo","entity2":"Encarnación"},{"entity1":"Encarnación","relationship":"madre","entity2":"yo"}]
+      
       Texto: "${remainingText}"
       
       Respuesta SOLO en formato JSON:`;

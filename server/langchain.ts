@@ -362,16 +362,71 @@ export class LangChainAgent {
         }
       }
       
-      // Extract and store relationship information
+      // Extract and store relationship information - this should be done for EVERY message
       try {
         const { toolExecutor } = await import('./langchain.tools');
+        
+        // Always try to extract and store relationships from every message
         const relationshipResult = await toolExecutor.executeTool(
           "extract_relationships",
           `${userId}:${message}`
         );
         console.log('Relationship extraction result:', relationshipResult);
+        
+        // After extracting relationships, get existing ones to enrich the context for the next interaction
+        const relationships = await storage.getRelationships(userId);
+        if (relationships.length > 0) {
+          console.log(`Found ${relationships.length} stored relationships for user ${userId}`);
+        }
+        
+        // Check if the message contains a request for listing family members or relationships
+        const familyRelatedTerms = [
+          'familiares', 'familia', 'parientes', 'relación', 'relacion',
+          'conoces', 'sabes', 'sobre', 'listado', 'dame', 'dime', 'mostrar',
+          'quienes son'
+        ];
+        
+        const containsFamilyRequest = familyRelatedTerms.some(term =>
+          message.toLowerCase().includes(term)
+        );
+        
+        if (containsFamilyRequest && relationships.length > 0) {
+          
+          // Get all relationships for the user
+          const relationships = await storage.getRelationships(userId);
+          
+          // Format relationships into a readable list
+          if (relationships.length > 0) {
+            try {
+              // Get all user context information too
+              const userContexts = await storage.getAllUserContext(userId);
+              
+              // Generate a complete response with the family information
+              const familyInfoPrompt = `El usuario ha solicitado información sobre sus familiares.
+              Según la información almacenada, estos son sus familiares:
+              
+              ${relationships.map(r => `- ${r.entity1} es ${r.relationship} de ${r.entity2}`).join('\n')}
+              
+              Información adicional del usuario:
+              ${userContexts.map(ctx => `- ${ctx.key}: ${ctx.value}`).join('\n')}
+              
+              Genera una respuesta natural y amigable en español que liste todos sus familiares de forma organizada.`;
+              
+              // Use a direct response instead of modifying the prompt
+              const familyResponse = await llm.invoke(familyInfoPrompt);
+              fullResponse = familyResponse.content as string;
+              
+              // Replace the streamed response with our custom response
+              yield fullResponse;
+              return;
+            } catch (error) {
+              console.error('Error generating family information response:', error);
+              // Continue with normal flow if this fails
+            }
+          }
+        }
       } catch (error) {
-        console.error('Error extracting relationships:', error);
+        console.error('Error processing relationships:', error);
         // Don't throw the error, just log it to avoid breaking the conversation flow
       }
 

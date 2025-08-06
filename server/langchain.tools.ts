@@ -189,6 +189,118 @@ Respuesta en formato JSON:`;
   },
 });
 
+// Tool for extracting relationships from text
+export const extractRelationshipsTool = new DynamicTool({
+  name: "extract_relationships",
+  description: "Extract relationships between people or entities mentioned in text.",
+  func: async (input: string) => {
+    try {
+      // Expected format: "userId:text"
+      const [userId, text] = input.split(':', 2);
+      const remainingText = input.substring(userId.length + 1);
+      
+      if (!userId || !remainingText) {
+        return "Invalid format. Expected: userId:text containing relationships";
+      }
+      
+      const relationshipPrompt = `Extrae las relaciones entre personas o entidades del siguiente texto.
+      Responde en formato JSON con un array de objetos que contengan:
+      - entity1: La primera entidad
+      - relationship: La relación de entity1 hacia entity2
+      - entity2: La segunda entidad
+
+      Por ejemplo, si el texto dice "María es la madre de Juan", el resultado sería:
+      [{"entity1":"María","relationship":"madre","entity2":"Juan"}]
+
+      Texto: "${remainingText}"
+      
+      Respuesta SOLO en formato JSON:`;
+      
+      const response = await toolLLM.invoke(relationshipPrompt);
+      const content = response.content as string;
+      
+      // Extract JSON from the response - using a more compatible regex
+      const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (!jsonMatch) {
+        return "No relationships found or could not parse response.";
+      }
+      
+      try {
+        const relationships = JSON.parse(jsonMatch[0]);
+        
+        // Store relationships in database
+        for (const rel of relationships) {
+          await storage.addRelationship(
+            userId,
+            rel.entity1,
+            rel.relationship,
+            rel.entity2
+          );
+        }
+        
+        return `Successfully extracted and stored ${relationships.length} relationships.`;
+      } catch (jsonError) {
+        console.error('Error parsing JSON from relationship extraction:', jsonError);
+        return "Error parsing extracted relationships.";
+      }
+    } catch (error) {
+      console.error('Error extracting relationships:', error);
+      return "Error extracting relationships.";
+    }
+  },
+});
+
+// Tool for inferring relationships between entities
+export const inferRelationshipTool = new DynamicTool({
+  name: "infer_relationship",
+  description: "Infer the relationship between two entities based on stored relationship data.",
+  func: async (input: string) => {
+    try {
+      // Expected format: "userId:entity1:entity2"
+      const [userId, entity1, entity2] = input.split(':');
+      
+      if (!userId || !entity1 || !entity2) {
+        return "Invalid format. Expected: userId:entity1:entity2";
+      }
+      
+      const relationship = await storage.inferRelationship(userId, entity1, entity2);
+      
+      if (relationship) {
+        return `Relationship from ${entity1} to ${entity2}: ${relationship}`;
+      } else {
+        return `No relationship found between ${entity1} and ${entity2}.`;
+      }
+    } catch (error) {
+      console.error('Error inferring relationship:', error);
+      return "Error inferring relationship.";
+    }
+  },
+});
+
+// Tool for getting all relationships for a user
+export const getRelationshipsTool = new DynamicTool({
+  name: "get_relationships",
+  description: "Get all stored relationships for a user.",
+  func: async (userId: string) => {
+    try {
+      const relationships = await storage.getRelationships(userId);
+      
+      if (relationships.length === 0) {
+        return "No relationships stored for this user.";
+      }
+      
+      const relationshipsText = relationships
+        .map(r => `${r.entity1} ${r.relationship} ${r.entity2}`)
+        .join('\n');
+      
+      return `Stored relationships:\n${relationshipsText}`;
+    } catch (error) {
+      console.error('Error getting relationships:', error);
+      return "Error retrieving relationships.";
+    }
+  },
+});
+
 // Export all tools
 export const langChainTools: Tool[] = [
   getUserContextTool,
@@ -198,6 +310,9 @@ export const langChainTools: Tool[] = [
   generateSummaryTool,
   languageTool,
   sentimentAnalysisTool,
+  extractRelationshipsTool,
+  inferRelationshipTool,
+  getRelationshipsTool,
 ];
 
 // Tool executor utility

@@ -8,7 +8,8 @@ import {
   serial,
   integer,
   boolean,
-  vector
+  vector,
+  uniqueIndex
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -97,10 +98,34 @@ export const userContext = pgTable('user_context', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// Relationships table for storing entity relationships
+export const relationships = pgTable('relationships', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id').notNull().references(() => users.id),
+  entity1: varchar('entity1').notNull(),
+  relationship: varchar('relationship').notNull(),
+  entity2: varchar('entity2').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+  return {
+    userIdIdx: index('idx_relationships_user_id').on(table.userId),
+    entity1Idx: index('idx_relationships_entity1').on(table.entity1),
+    entity2Idx: index('idx_relationships_entity2').on(table.entity2),
+  };
+});
+
 // Relations
 export const userContextRelations = relations(userContext, ({ one }) => ({
   user: one(users, {
     fields: [userContext.userId],
+    references: [users.id],
+  }),
+}));
+
+export const relationshipsRelations = relations(relationships, ({ one }) => ({
+  user: one(users, {
+    fields: [relationships.userId],
     references: [users.id],
   }),
 }));
@@ -117,6 +142,9 @@ export type Message = typeof messages.$inferSelect;
 
 export type InsertUserContext = typeof userContext.$inferInsert;
 export type UserContext = typeof userContext.$inferSelect;
+
+export type InsertRelationship = typeof relationships.$inferInsert;
+export type Relationship = typeof relationships.$inferSelect;
 
 // Schemas
 export const insertChatSchema = createInsertSchema(chats).omit({

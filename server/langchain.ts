@@ -283,7 +283,45 @@ export class LangChainAgent {
   }
 
   async* processMessage(userId: string, message: string, chatId?: number): AsyncGenerator<string> {
+    // First, check if the message contains a question about relationships
+    const relationshipQuestionPattern = /(?:qué|cuál|cual)\s+(?:es|sería|seria)\s+(?:la\s+)?relaci[oó]n\s+(?:entre|de)\s+(\w+)\s+(?:y|con)\s+(\w+)/i;
+    const match = message.match(relationshipQuestionPattern);
+    
     try {
+      // Handle relationship questions
+      if (match) {
+        const entity1 = match[1];
+        const entity2 = match[2];
+        
+        try {
+          const { toolExecutor } = await import('./langchain.tools');
+          const relationshipResult = await toolExecutor.executeTool(
+            "infer_relationship",
+            `${userId}:${entity1}:${entity2}`
+          );
+          
+          // If we found a relationship, use it in the response
+          if (!relationshipResult.includes("No relationship found")) {
+            const relationshipParts = relationshipResult.split(': ');
+            if (relationshipParts.length > 1) {
+              const relationship = relationshipParts[1];
+              
+              // Create a natural language response
+              let response = `${entity2} es ${relationship} de ${entity1}.`;
+              
+              for await (const chunk of response) {
+                yield chunk;
+              }
+              
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Error inferring relationship:', error);
+          // Continue with normal processing if relationship inference fails
+        }
+      }
+      
       // Get similar conversations for context
       const similarEmbeddings = await storage.getSimilarEmbeddings(userId, message, 3);
       const contextSnippets = similarEmbeddings
@@ -322,6 +360,19 @@ export class LangChainAgent {
         if (value && value.trim()) {
           await storage.setUserContext(userId, key, value);
         }
+      }
+      
+      // Extract and store relationship information
+      try {
+        const { toolExecutor } = await import('./langchain.tools');
+        const relationshipResult = await toolExecutor.executeTool(
+          "extract_relationships",
+          `${userId}:${message}`
+        );
+        console.log('Relationship extraction result:', relationshipResult);
+      } catch (error) {
+        console.error('Error extracting relationships:', error);
+        // Don't throw the error, just log it to avoid breaking the conversation flow
       }
 
     } catch (error) {

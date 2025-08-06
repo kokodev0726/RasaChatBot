@@ -58,8 +58,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         title,
       });
 
-
-      
       res.json(chat);
     } catch (error) {
       console.error("Error creating chat:", error);
@@ -116,23 +114,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const chat = await storage.getChat(chatId);
       if (!chat || chat.userId !== userId) {
         return res.status(403).json({ message: "Access denied" });
-      }
-
-      // If this is a user message and LangChain is enabled, we might want to process it
-      if (role === "user" && useLangChain) {
-        // Extract user information using LangChain
-        const extractedInfo = await langChainChains.extractUserInfo(content);
-        for (const [key, value] of Object.entries(extractedInfo)) {
-          if (value && value.trim()) {
-            await storage.setUserContext(userId, key, value);
-          }
-        }
-      }
-
-      // For assistant messages, we might want to use LangChain to generate them
-      if (role === "assistant" && useLangChain) {
-        // This would typically be handled by the streaming endpoint
-        // But we can add LangChain processing here if needed
       }
 
       const message = await storage.createMessage({
@@ -351,8 +332,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).parse(req.body);
 
       // Verify chat ownership if chatId is provided
+      let chat;
       if (chatId) {
-        const chat = await storage.getChat(chatId);
+        chat = await storage.getChatWithMessages(chatId);
         if (!chat || chat.userId !== userId) {
           return res.status(403).json({ message: "Access denied" });
         }
@@ -407,6 +389,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Create embedding for future reference
           await storage.createEmbedding(userId, message, fullResponse);
+
+          // Update chat title if this is the first message
+          if (chat && chat.messages.length === 0) {
+            const title = await langChainChains.generateChatTitle([message]);
+            await storage.updateChatTitle(chatId, title);
+          }
         }
 
         res.end();

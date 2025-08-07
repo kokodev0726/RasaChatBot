@@ -50,6 +50,9 @@ export interface IStorage {
   getSimilarEmbeddings(userId: string, query: string, topN?: number): Promise<
     { id: number; user_input: string; bot_output: string; distance: number }[]
   >;
+  getUserEmbeddings(userId: string, limit?: number): Promise<
+    { id: number; user_input: string; bot_output: string; created_at: Date }[]
+  >;
   
   // User context operations
   setUserContext(userId: string, key: string, value: string): Promise<void>;
@@ -215,6 +218,31 @@ export class DatabaseStorage implements IStorage {
     `);
 
     return rows;
+  }
+
+  async getUserEmbeddings(userId: string, limit = 10): Promise<{ id: number; user_input: string; bot_output: string; created_at: Date }[]> {
+    try {
+      const { rows } = await db.execute<{
+        id: number;
+        user_input: string;
+        bot_output: string;
+        created_at: Date;
+      }>(sql`
+        SELECT id,
+               user_input,
+               bot_output,
+               created_at
+        FROM   embeddings
+        WHERE  user_id = ${userId}
+        ORDER  BY created_at DESC
+        LIMIT  ${limit}
+      `);
+
+      return rows;
+    } catch (error) {
+      console.error('Error getting user embeddings:', error);
+      return [];
+    }
   }
 
   // User context operations

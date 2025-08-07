@@ -113,11 +113,9 @@ export class LangChainConversation {
 
   async* streamConversation(userId: string, message: string): AsyncGenerator<string> {
     try {
-      // Get similar conversations for context
-      const similarEmbeddings = await storage.getSimilarEmbeddings(userId, message, 3);
-      const contextSnippets = similarEmbeddings
-        .map(s => `Usuario: ${s.user_input}\nAsistente: ${s.bot_output}`)
-        .join('\n\n');
+      // Get user chat history for context
+      const agent = langChainAgent;
+      const contextSnippets = await agent.getUserChatHistory(userId, 0);
 
       // Use the same prompt as OpenAI with context
       const systemPromptWithContext = config.systemPrompt.replace('{context}', contextSnippets);
@@ -376,11 +374,28 @@ export class LangChainAgent {
         }
       }
       
-      // Get similar conversations for context
+      // Get both similar conversations and recent chat history for context
       const similarEmbeddings = await storage.getSimilarEmbeddings(userId, message, 3);
-      const contextSnippets = similarEmbeddings
-        .map(s => `Usuario: ${s.user_input}\nAsistente: ${s.bot_output}`)
-        .join('\n\n');
+      const recentHistory = await this.getUserEmbeddingsHistory(userId, 5);
+      
+      // Combine both for better context
+      let contextSnippets = await this.getUserChatHistory(userId, 0);
+      
+      // First add recent history (more important)
+      // if (recentHistory && !recentHistory.startsWith("No conversation")) {
+      //   contextSnippets += "--- Conversación reciente ---\n" + recentHistory + "\n\n";
+      // }
+      
+      // Then add similar conversations
+      // if (similarEmbeddings.length > 0) {
+      //   const similarConversations = similarEmbeddings
+      //     .map(s => `Usuario: ${s.user_input}\nAsistente: ${s.bot_output}`)
+      //     .join('\n\n');
+          
+      //   if (similarConversations) {
+      //     contextSnippets += "--- Conversaciones similares ---\n" + similarConversations;
+      //   }
+      // }
 
       // Create enhanced prompt with context using the same prompt as OpenAI
       const systemPromptWithContext = config.systemPrompt.replace('{context}', contextSnippets);
@@ -550,6 +565,70 @@ export class LangChainAgent {
     });
     
     return groups;
+  }
+  
+  /**
+   * Get complete chat history for a specific user formatted for context
+   * @param userId The ID of the user
+   * @param limit Optional maximum number of messages to return
+   * @returns Formatted chat history string
+   */
+  async getUserChatHistory(userId: string, limit?: number): Promise<string> {
+    try {
+      // Get all chats for the user
+      const userChats = await storage.getUserChats(userId);
+      
+      if (userChats.length === 0) {
+        return "No chat history found for this user.";
+      }
+      
+      // Get the most recent chat
+      const mostRecentChat = userChats[0]; // getUserChats returns chats ordered by updatedAt desc
+      
+      // Get all messages for this chat
+      const chatMessages = await storage.getChatMessages(mostRecentChat.id);
+      
+      // Apply limit if specified
+      const limitedMessages = limit ? chatMessages.slice(-limit) : chatMessages;
+      
+      // Format messages in the specified format
+      const formattedHistory = limitedMessages.map(msg => {
+        const role = msg.role === 'user' ? 'Usuario' : 'Asistente';
+        return `${role}: ${msg.content}`;
+      }).join('\n\n');
+      
+      return formattedHistory;
+    } catch (error) {
+      console.error('Error getting user chat history:', error);
+      return "Error retrieving chat history.";
+    }
+  }
+  
+  /**
+   * Get all embeddings history for a user formatted for context
+   * @param userId The ID of the user
+   * @param limit Optional maximum number of embeddings to return
+   * @returns Formatted embeddings history string
+   */
+  async getUserEmbeddingsHistory(userId: string, limit: number = 10): Promise<string> {
+    try {
+      // Get raw embeddings without similarity search - this will get actual conversation history
+      const embeddings = await storage.getUserEmbeddings(userId, limit);
+      
+      if (embeddings.length === 0) {
+        return "No conversation history found for this user.";
+      }
+      
+      // Format embeddings in the required format
+      const formattedHistory = embeddings.map((e: { user_input: string; bot_output: string }) =>
+        `Usuario: ${e.user_input}\nAsistente: ${e.bot_output}`
+      ).join('\n\n');
+      
+      return formattedHistory;
+    } catch (error) {
+      console.error('Error getting user embeddings history:', error);
+      return "Error retrieving conversation history.";
+    }
   }
   
   async generateTitle(messages: string[]): Promise<string> {

@@ -568,9 +568,9 @@ export class LangChainAgent {
   }
   
   /**
-   * Get complete chat history for a specific user formatted for context
+   * Get complete chat history for a specific user from all chats formatted for context
    * @param userId The ID of the user
-   * @param limit Optional maximum number of messages to return
+   * @param limit Optional maximum number of messages to return across all chats
    * @returns Formatted chat history string
    */
   async getUserChatHistory(userId: string, limit?: number): Promise<string> {
@@ -582,17 +582,38 @@ export class LangChainAgent {
         return "No chat history found for this user.";
       }
       
-      // Get the most recent chat
-      const mostRecentChat = userChats[0]; // getUserChats returns chats ordered by updatedAt desc
+      // Collect messages from all chats
+      let allMessages: any[] = [];
       
-      // Get all messages for this chat
-      const chatMessages = await storage.getChatMessages(mostRecentChat.id);
+      // Iterate through all user chats
+      for (const chat of userChats) {
+        // Get messages for this chat
+        const chatMessages = await storage.getChatMessages(chat.id);
+        
+        // Add chat title as context if available
+        if (chat.title && chatMessages.length > 0) {
+          allMessages.push({
+            role: 'system',
+            content: `--- Chat: ${chat.title} ---`,
+            createdAt: chatMessages[0].createdAt // Use first message timestamp for ordering
+          });
+        }
+        
+        // Add all messages from this chat
+        allMessages = allMessages.concat(chatMessages);
+      }
+      
+      // Sort all messages by creation date to maintain chronological order
+      allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       
       // Apply limit if specified
-      const limitedMessages = limit ? chatMessages.slice(-limit) : chatMessages;
+      const limitedMessages = limit ? allMessages.slice(-limit) : allMessages;
       
       // Format messages in the specified format
       const formattedHistory = limitedMessages.map(msg => {
+        if (msg.role === 'system') {
+          return msg.content; // Keep system messages as is (chat titles)
+        }
         const role = msg.role === 'user' ? 'Usuario' : 'Asistente';
         return `${role}: ${msg.content}`;
       }).join('\n\n');

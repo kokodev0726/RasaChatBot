@@ -568,52 +568,25 @@ export class LangChainAgent {
   }
   
   /**
-   * Get complete chat history for a specific user from all chats formatted for context
+   * Get complete chat history for a specific user from all messages formatted for context
    * @param userId The ID of the user
-   * @param limit Optional maximum number of messages to return across all chats
+   * @param limit Optional maximum number of messages to return
    * @returns Formatted chat history string
    */
   async getUserChatHistory(userId: string, limit?: number): Promise<string> {
     try {
-      // Get all chats for the user
-      const userChats = await storage.getUserChats(userId);
+      // Get all messages for the user directly (this will include messages from deleted chats)
+      const userMessages = await storage.getUserMessages(userId, limit);
       
-      if (userChats.length === 0) {
+      if (userMessages.length === 0) {
         return "No chat history found for this user.";
       }
       
-      // Collect messages from all chats
-      let allMessages: any[] = [];
-      
-      // Iterate through all user chats
-      for (const chat of userChats) {
-        // Get messages for this chat
-        const chatMessages = await storage.getChatMessages(chat.id);
-        
-        // Add chat title as context if available
-        if (chat.title && chatMessages.length > 0) {
-          allMessages.push({
-            role: 'system',
-            content: `--- Chat: ${chat.title} ---`,
-            createdAt: chatMessages[0].createdAt // Use first message timestamp for ordering
-          });
-        }
-        
-        // Add all messages from this chat
-        allMessages = allMessages.concat(chatMessages);
-      }
-      
-      // Sort all messages by creation date to maintain chronological order
-      allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      
-      // Apply limit if specified
-      const limitedMessages = limit ? allMessages.slice(-limit) : allMessages;
+      // Reverse the messages to get chronological order (getUserMessages returns newest first)
+      const chronologicalMessages = userMessages.reverse();
       
       // Format messages in the specified format
-      const formattedHistory = limitedMessages.map(msg => {
-        if (msg.role === 'system') {
-          return msg.content; // Keep system messages as is (chat titles)
-        }
+      const formattedHistory = chronologicalMessages.map(msg => {
         const role = msg.role === 'user' ? 'Usuario' : 'Asistente';
         return `${role}: ${msg.content}`;
       }).join('\n\n');

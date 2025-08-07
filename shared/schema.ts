@@ -53,6 +53,7 @@ export const chats = pgTable("chats", {
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   chatId: integer("chat_id").notNull().references(() => chats.id),
+  userId: varchar("user_id").notNull().references(() => users.id), // Add userId field
   content: text("content").notNull(),
   role: varchar("role").notNull(), // 'user' or 'assistant'
   createdAt: timestamp("created_at").defaultNow(),
@@ -61,6 +62,7 @@ export const messages = pgTable("messages", {
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   chats: many(chats),
+  messages: many(messages),
 }));
 
 export const chatsRelations = relations(chats, ({ one, many }) => ({
@@ -75,6 +77,10 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   chat: one(chats, {
     fields: [messages.chatId],
     references: [chats.id],
+  }),
+  user: one(users, {
+    fields: [messages.userId],
+    references: [users.id],
   }),
 }));
 

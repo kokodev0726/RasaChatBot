@@ -46,6 +46,7 @@ export interface IStorage {
   // Message operations
   createMessage(message: InsertMessage): Promise<Message>;
   getChatMessages(chatId: number): Promise<Message[]>;
+  getUserMessages(userId: string, limit?: number): Promise<Message[]>;
   createEmbedding(userId: string, userInput: string, bot_output: string): Promise<any>;
   getSimilarEmbeddings(userId: string, query: string, topN?: number): Promise<
     { id: number; user_input: string; bot_output: string; distance: number }[]
@@ -150,10 +151,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteChat(chatId: number, userId: string): Promise<void> {
-    // First delete all messages in the chat
-    await db.delete(messages).where(eq(messages.chatId, chatId));
-    
-    // Then delete the chat (only if it belongs to the user)
+    // Only delete the chat, preserve messages for context
+    // Messages now have userId so they can be retrieved even after chat deletion
     await db
       .delete(chats)
       .where(and(eq(chats.id, chatId), eq(chats.userId, userId)));
@@ -181,6 +180,20 @@ export class DatabaseStorage implements IStorage {
       .from(messages)
       .where(eq(messages.chatId, chatId))
       .orderBy(messages.createdAt);
+  }
+
+  async getUserMessages(userId: string, limit?: number): Promise<Message[]> {
+    const query = db
+      .select()
+      .from(messages)
+      .where(eq(messages.userId, userId))
+      .orderBy(desc(messages.createdAt));
+    
+    if (limit) {
+      return await query.limit(limit);
+    }
+    
+    return await query;
   }
 
   async createEmbedding(userId: string, userInput: string, bot_output: string): Promise<any> {

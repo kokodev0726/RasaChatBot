@@ -118,6 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const message = await storage.createMessage({
         chatId,
+        userId,
         content,
         role,
       });
@@ -148,6 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save user message
       await storage.createMessage({
         chatId,
+        userId,
         content: message,
         role: "user",
       });
@@ -210,6 +212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Save AI response
         await storage.createMessage({
           chatId,
+          userId,
           content: fullResponse,
           role: "assistant",
         });
@@ -274,6 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (chatId) {
         await storage.createMessage({
           chatId,
+          userId,
           content: message,
           role: "user",
         });
@@ -303,6 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (chatId) {
           await storage.createMessage({
             chatId,
+            userId,
             content: fullResponse,
             role: "assistant",
           });
@@ -344,6 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (chatId) {
         await storage.createMessage({
           chatId,
+          userId,
           content: message,
           role: "user",
         });
@@ -383,6 +389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (chatId) {
           await storage.createMessage({
             chatId,
+            userId,
             content: fullResponse,
             role: "assistant",
           });

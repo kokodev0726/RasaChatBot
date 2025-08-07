@@ -308,23 +308,41 @@ export class DatabaseStorage implements IStorage {
   }
 
   async inferRelationship(userId: string, entity1: string, entity2: string): Promise<string | null> {
+    // Normalize entity names for comparison
+    const normalizedEntity1 = entity1.toLowerCase().trim();
+    const normalizedEntity2 = entity2.toLowerCase().trim();
+    
+    // Special case for "me", "yo", "mi" - replace with common representation
+    const entity1Norm = ['me', 'yo', 'mi', 'mis'].includes(normalizedEntity1) ? 'yo' : normalizedEntity1;
+    const entity2Norm = ['me', 'yo', 'mi', 'mis'].includes(normalizedEntity2) ? 'yo' : normalizedEntity2;
+    
+    console.log(`Inferring relationship between: ${entity1Norm} and ${entity2Norm}`);
+    
     // First, try to find direct relationships
-    const directRelations = await this.findRelationship(userId, entity1, entity2);
+    const directRelations = await this.findRelationship(userId, entity1Norm, entity2Norm);
+    console.log(`Found ${directRelations.length} direct relationships`);
+    
     if (directRelations.length > 0) {
       const relation = directRelations[0];
-      if (relation.entity1.toLowerCase() === entity1.toLowerCase()) {
+      if (relation.entity1.toLowerCase() === entity1Norm) {
+        console.log(`Returning direct relationship: ${relation.relationship}`);
         return relation.relationship;
       } else {
         // Need to invert the relationship if entities are reversed
-        return this.invertRelationship(relation.relationship);
+        const invertedRel = this.invertRelationship(relation.relationship);
+        console.log(`Returning inverted relationship: ${invertedRel}`);
+        return invertedRel;
       }
     }
 
     // If no direct relationship, try to find indirect relationships (with one intermediary)
     // Get all relationships involving entity1
-    const entity1Relations = await this.getRelationshipsForEntity(userId, entity1);
+    const entity1Relations = await this.getRelationshipsForEntity(userId, entity1Norm);
     // Get all relationships involving entity2
-    const entity2Relations = await this.getRelationshipsForEntity(userId, entity2);
+    const entity2Relations = await this.getRelationshipsForEntity(userId, entity2Norm);
+    
+    console.log(`Found ${entity1Relations.length} relationships for ${entity1Norm}`);
+    console.log(`Found ${entity2Relations.length} relationships for ${entity2Norm}`);
 
     // Look for a common entity connecting entity1 and entity2
     for (const rel1 of entity1Relations) {
@@ -354,49 +372,157 @@ export class DatabaseStorage implements IStorage {
   private invertRelationship(relationship: string): string {
     // Map of relationships and their inverses
     const relationshipInverses: Record<string, string> = {
+      // Family relationships
+      'esposa': 'esposo',
+      'esposo': 'esposa',
       'wife': 'husband',
       'husband': 'wife',
-      'brother': 'sibling',
-      'sister': 'sibling',
+      'mujer': 'marido',
+      'marido': 'mujer',
+      'hermano': 'hermano',
+      'hermana': 'hermana',
+      'brother': 'brother',
+      'sister': 'sister',
+      'padre': 'hijo',
+      'madre': 'hija',
       'father': 'son',
       'mother': 'daughter',
+      'hijo': 'padre',
+      'hija': 'madre',
       'son': 'father',
       'daughter': 'mother',
+      'abuelo': 'nieto',
+      'abuela': 'nieta',
+      'grandfather': 'grandson',
+      'grandmother': 'granddaughter',
+      'nieto': 'abuelo',
+      'nieta': 'abuela',
+      'grandson': 'grandfather',
+      'granddaughter': 'grandmother',
+      'tío': 'sobrino',
+      'tía': 'sobrina',
+      'uncle': 'nephew',
+      'aunt': 'niece',
+      'sobrino': 'tío',
+      'sobrina': 'tía',
+      'nephew': 'uncle',
+      'niece': 'aunt',
+      'primo': 'primo',
+      'prima': 'prima',
+      'cousin': 'cousin',
+      'cuñado': 'cuñado',
+      'cuñada': 'cuñada',
       'brother-in-law': 'sibling-in-law',
       'sister-in-law': 'sibling-in-law',
-      'has': 'belongs to',
-      'belongs to': 'has',
+      'suegro': 'yerno',
+      'suegra': 'nuera',
+      'father-in-law': 'son-in-law',
+      'mother-in-law': 'daughter-in-law',
+      'yerno': 'suegro',
+      'nuera': 'suegra',
+      'son-in-law': 'father-in-law',
+      'daughter-in-law': 'mother-in-law',
+      
+      // Possession relationships
+      'propietario': 'pertenece_a',
+      'propietaria': 'pertenece_a',
+      'dueño': 'pertenece_a',
+      'dueña': 'pertenece_a',
+      'owner': 'belongs_to',
+      'pertenece_a': 'propietario',
+      'belongs_to': 'owner',
+      'has': 'belongs_to',
+      'tiene': 'pertenece_a',
+      
+      // Social relationships
+      'amigo': 'amigo',
+      'amiga': 'amiga',
       'friend': 'friend',
       'partner': 'partner',
-      'cousin': 'cousin',
-      'aunt': 'niece/nephew',
-      'uncle': 'niece/nephew',
-      'niece': 'aunt/uncle',
-      'nephew': 'aunt/uncle'
+      'pareja': 'pareja',
+      'novio': 'novia',
+      'novia': 'novio',
+      'boyfriend': 'girlfriend',
+      'girlfriend': 'boyfriend',
+      'colega': 'colega',
+      'colleague': 'colleague',
+      'jefe': 'empleado',
+      'jefa': 'empleada',
+      'boss': 'employee',
+      'empleado': 'jefe',
+      'empleada': 'jefa',
+      'employee': 'boss',
+      
+      // Location relationships
+      'residente_de': 'ubicación_de',
+      'resident_of': 'location_of',
+      'ubicación_de': 'residente_de',
+      'location_of': 'resident_of',
+      'vive_en': 'hogar_de',
+      'lives_in': 'home_of',
+      'hogar_de': 'vive_en',
+      'home_of': 'lives_in'
     };
 
-    return relationshipInverses[relationship] || relationship;
+    // If the relationship is not found in the map, return the original
+    return relationshipInverses[relationship.toLowerCase()] || relationship;
   }
 
   private combineRelationships(rel1: string, intermediary: string, rel2: string): string {
+    console.log(`Combining relationships: ${rel1} -> ${intermediary} -> ${rel2}`);
+    
+    // Convert to lowercase for easier comparison
+    const r1 = rel1.toLowerCase();
+    const r2 = rel2.toLowerCase();
+    
     // Special cases for complex relationship combinations
-    if (rel1 === 'wife' && rel2 === 'brother') {
+    
+    // In-law relationships
+    if ((r1 === 'wife' || r1 === 'esposa' || r1 === 'mujer') &&
+        (r2 === 'brother' || r2 === 'hermano')) {
       return 'brother-in-law';
     }
-    if (rel1 === 'husband' && rel2 === 'brother') {
+    if ((r1 === 'husband' || r1 === 'esposo' || r1 === 'marido') &&
+        (r2 === 'brother' || r2 === 'hermano')) {
       return 'brother-in-law';
     }
-    if (rel1 === 'wife' && rel2 === 'sister') {
+    if ((r1 === 'wife' || r1 === 'esposa' || r1 === 'mujer') &&
+        (r2 === 'sister' || r2 === 'hermana')) {
       return 'sister-in-law';
     }
-    if (rel1 === 'husband' && rel2 === 'sister') {
+    if ((r1 === 'husband' || r1 === 'esposo' || r1 === 'marido') &&
+        (r2 === 'sister' || r2 === 'hermana')) {
       return 'sister-in-law';
     }
-    if (rel1 === 'brother' && rel2 === 'wife') {
+    
+    // Sibling's spouse
+    if ((r1 === 'brother' || r1 === 'hermano') &&
+        (r2 === 'wife' || r2 === 'esposa' || r2 === 'mujer')) {
       return "brother's wife";
     }
-    if (rel1 === 'sister' && rel2 === 'husband') {
+    if ((r1 === 'sister' || r1 === 'hermana') &&
+        (r2 === 'husband' || r2 === 'esposo' || r2 === 'marido')) {
       return "sister's husband";
+    }
+    
+    // Parent's sibling (aunt/uncle)
+    if ((r1 === 'father' || r1 === 'madre' || r1 === 'padre' || r1 === 'mother') &&
+        (r2 === 'brother' || r2 === 'hermano')) {
+      return 'uncle';
+    }
+    if ((r1 === 'father' || r1 === 'madre' || r1 === 'padre' || r1 === 'mother') &&
+        (r2 === 'sister' || r2 === 'hermana')) {
+      return 'aunt';
+    }
+    
+    // Sibling's child (niece/nephew)
+    if ((r1 === 'brother' || r1 === 'hermano' || r1 === 'sister' || r1 === 'hermana') &&
+        (r2 === 'son' || r2 === 'hijo')) {
+      return 'nephew';
+    }
+    if ((r1 === 'brother' || r1 === 'hermano' || r1 === 'sister' || r1 === 'hermana') &&
+        (r2 === 'daughter' || r2 === 'hija')) {
+      return 'niece';
     }
     
     // Default format if no special case matches

@@ -283,18 +283,27 @@ export class LangChainAgent {
   }
 
   async* processMessage(userId: string, message: string, chatId?: number): AsyncGenerator<string> {
-    // First, check if the message contains a question about relationships
+    // Check if the message contains a question about relationships or family members
+    // This pattern looks for direct relationship questions
     const relationshipQuestionPattern = /(?:qué|cuál|cual)\s+(?:es|sería|seria)\s+(?:la\s+)?relaci[oó]n\s+(?:entre|de)\s+(\w+)\s+(?:y|con)\s+(\w+)/i;
-    const match = message.match(relationshipQuestionPattern);
+    
+    // This pattern looks for questions about specific relationships like "who is my sister?"
+    const specificRelationshipPattern = /(?:quién|quien|quiénes|quienes|donde|dónde|cuál|cual)\s+(?:es|son|está|esta)\s+(?:mi|mis|tu|tus|su|sus)\s+(\w+)/i;
+    
+    // Match on either pattern
+    const directMatch = message.match(relationshipQuestionPattern);
+    const specificMatch = message.match(specificRelationshipPattern);
     
     try {
-      // Handle relationship questions
-      if (match) {
-        const entity1 = match[1];
-        const entity2 = match[2];
+      // Import tool executor only once
+      const { toolExecutor } = await import('./langchain.tools');
+      
+      // Handle direct relationship questions (e.g., "what is the relationship between X and Y?")
+      if (directMatch) {
+        const entity1 = directMatch[1];
+        const entity2 = directMatch[2];
         
         try {
-          const { toolExecutor } = await import('./langchain.tools');
           const relationshipResult = await toolExecutor.executeTool(
             "infer_relationship",
             `${userId}:${entity1}:${entity2}`
@@ -307,18 +316,63 @@ export class LangChainAgent {
               const relationship = relationshipParts[1];
               
               // Create a natural language response
-              let response = `${entity2} es ${relationship} de ${entity1}.`;
+              const response = `${entity2} es ${relationship} de ${entity1}.`;
               
-              for await (const chunk of response) {
-                yield chunk;
-              }
-              
+              // Stream the response as a whole, not character by character
+              yield response;
               return;
             }
           }
         } catch (error) {
-          console.error('Error inferring relationship:', error);
-          // Continue with normal processing if relationship inference fails
+          console.error('Error inferring direct relationship:', error);
+        }
+      }
+      
+      // Handle specific relationship questions (e.g., "who is my sister?")
+      else if (specificMatch) {
+        const relationshipType = specificMatch[1].toLowerCase();
+        
+        try {
+          // Get all relationships for this user
+          const relationships = await storage.getRelationships(userId);
+          
+          // Filter relationships to find matches for the requested relationship type
+          const matchingRelationships = relationships.filter(rel => {
+            // Check if this is a relationship where "yo" or "me" is entity1 and the relationship matches
+            return (
+              (rel.entity1.toLowerCase() === 'yo' || rel.entity1.toLowerCase() === 'me') &&
+              rel.relationship.toLowerCase().includes(relationshipType.toLowerCase())
+            );
+          });
+          
+          if (matchingRelationships.length > 0) {
+            // Format a response with all matching relationships
+            const familyMembers = matchingRelationships.map(rel => rel.entity2).join(', ');
+            const response = `Tu ${relationshipType} es ${familyMembers}.`;
+            
+            // Stream the response
+            yield response;
+            return;
+          }
+          
+          // Also check inverse relationships (e.g., if someone is looking for "sister" but it's stored as "hermana")
+          const inverseMatches = relationships.filter(rel => {
+            return (
+              (rel.entity2.toLowerCase() === 'yo' || rel.entity2.toLowerCase() === 'me') &&
+              rel.relationship.toLowerCase().includes(relationshipType.toLowerCase())
+            );
+          });
+          
+          if (inverseMatches.length > 0) {
+            const familyMembers = inverseMatches.map(rel => rel.entity1).join(', ');
+            const response = `Tu ${relationshipType} es ${familyMembers}.`;
+            
+            // Stream the response
+            yield response;
+            return;
+          }
+        } catch (error) {
+          console.error('Error processing specific relationship query:', error);
         }
       }
       
@@ -392,8 +446,11 @@ export class LangChainAgent {
         
         if (containsFamilyRequest && relationships.length > 0) {
           
-          // Get all relationships for the user
+          // Get all relationships for the user, filtering out duplicates by creating a unique key for each relationship
           const relationships = await storage.getRelationships(userId);
+          
+          // Group relationships by type to organize the display
+          const groupedRelationships = this.groupRelationshipsByType(relationships);
           
           // Format relationships into a readable list
           if (relationships.length > 0) {
@@ -405,7 +462,9 @@ export class LangChainAgent {
               const familyInfoPrompt = `El usuario ha solicitado información sobre sus familiares.
               Según la información almacenada, estos son sus familiares:
               
-              ${relationships.map(r => `- ${r.entity1} es ${r.relationship} de ${r.entity2}`).join('\n')}
+              ${Object.entries(groupedRelationships).map(([type, rels]) =>
+                `${type}:\n${rels.map(r => `- ${r.entity1} es ${r.relationship} de ${r.entity2}`).join('\n')}`
+              ).join('\n\n')}
               
               Información adicional del usuario:
               ${userContexts.map(ctx => `- ${ctx.key}: ${ctx.value}`).join('\n')}
@@ -436,6 +495,63 @@ export class LangChainAgent {
     }
   }
 
+  /**
+   * Group relationships by their types for better organization
+   */
+  private groupRelationshipsByType(relationships: any[]): Record<string, any[]> {
+    const groups: Record<string, any[]> = {
+      'Familia': [],
+      'Amistades': [],
+      'Profesional': [],
+      'Ubicaciones': [],
+      'Posesiones': [],
+      'Otros': []
+    };
+    
+    // Helper function to determine relationship type
+    const getRelationshipType = (rel: string): string => {
+      const familyTerms = [
+        'esposo', 'esposa', 'marido', 'mujer', 'hermano', 'hermana',
+        'padre', 'madre', 'hijo', 'hija', 'abuelo', 'abuela', 'nieto', 'nieta',
+        'tío', 'tía', 'sobrino', 'sobrina', 'primo', 'prima', 'cuñado', 'cuñada',
+        'suegro', 'suegra', 'yerno', 'nuera', 'padrino', 'madrina'
+      ];
+      
+      const friendshipTerms = ['amigo', 'amiga', 'novio', 'novia', 'pareja'];
+      
+      const professionalTerms = ['jefe', 'jefa', 'empleado', 'empleada', 'colega', 'compañero', 'compañera'];
+      
+      const locationTerms = ['vive_en', 'reside_en', 'ubicado_en', 'ubicación'];
+      
+      const possessionTerms = ['propietario', 'dueño', 'tiene', 'posee', 'pertenece'];
+      
+      rel = rel.toLowerCase();
+      
+      if (familyTerms.some(term => rel.includes(term))) return 'Familia';
+      if (friendshipTerms.some(term => rel.includes(term))) return 'Amistades';
+      if (professionalTerms.some(term => rel.includes(term))) return 'Profesional';
+      if (locationTerms.some(term => rel.includes(term))) return 'Ubicaciones';
+      if (possessionTerms.some(term => rel.includes(term))) return 'Posesiones';
+      
+      return 'Otros';
+    };
+    
+    // Group the relationships
+    for (const rel of relationships) {
+      const type = getRelationshipType(rel.relationship);
+      groups[type].push(rel);
+    }
+    
+    // Remove empty categories
+    Object.keys(groups).forEach(key => {
+      if (groups[key].length === 0) {
+        delete groups[key];
+      }
+    });
+    
+    return groups;
+  }
+  
   async generateTitle(messages: string[]): Promise<string> {
     return await this.chains.generateChatTitle(messages);
   }

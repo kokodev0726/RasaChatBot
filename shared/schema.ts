@@ -152,6 +152,12 @@ export type UserContext = typeof userContext.$inferSelect;
 export type InsertRelationship = typeof relationships.$inferInsert;
 export type Relationship = typeof relationships.$inferSelect;
 
+export type InsertPsychologyQuestion = typeof psychologyQuestions.$inferInsert;
+export type PsychologyQuestion = typeof psychologyQuestions.$inferSelect;
+
+export type InsertUserGeneratedQuestion = typeof userGeneratedQuestions.$inferInsert;
+export type UserGeneratedQuestion = typeof userGeneratedQuestions.$inferSelect;
+
 // Schemas
 export const insertChatSchema = createInsertSchema(chats).omit({
   id: true,
@@ -174,3 +180,48 @@ export type ChatWithMessages = Chat & {
 export type ChatWithUser = Chat & {
   user: User;
 };
+
+// Psychology questions table
+export const psychologyQuestions = pgTable('psychology_questions', {
+  id: serial('id').primaryKey(),
+  question: text('question').notNull(),
+  category: varchar('category').notNull(), // e.g., 'initial_assessment', 'coping_mechanisms', etc.
+  isActive: boolean('is_active').default(true),
+  orderIndex: integer('order_index').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+  return {
+    categoryIdx: index('idx_psychology_questions_category').on(table.category),
+    activeIdx: index('idx_psychology_questions_active').on(table.isActive),
+  };
+});
+
+// User-specific generated questions table
+export const userGeneratedQuestions = pgTable('user_generated_questions', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id').notNull().references(() => users.id),
+  question: text('question').notNull(),
+  category: varchar('category').notNull(),
+  isUsed: boolean('is_used').default(false),
+  usedAt: timestamp('used_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+  return {
+    userIdIdx: index('idx_user_generated_questions_user_id').on(table.userId),
+    categoryIdx: index('idx_user_generated_questions_category').on(table.category),
+    usedIdx: index('idx_user_generated_questions_used').on(table.isUsed),
+  };
+});
+
+// Psychology questions relations
+export const psychologyQuestionsRelations = relations(psychologyQuestions, ({ many }) => ({
+  userGeneratedQuestions: many(userGeneratedQuestions),
+}));
+
+export const userGeneratedQuestionsRelations = relations(userGeneratedQuestions, ({ one }) => ({
+  user: one(users, {
+    fields: [userGeneratedQuestions.userId],
+    references: [users.id],
+  }),
+}));

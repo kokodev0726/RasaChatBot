@@ -622,7 +622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const stats = psychologyAgent.getSessionStats(userId);
+      const stats = await psychologyAgent.getSessionStats(userId);
       res.json(stats);
     } catch (error) {
       console.error("Error getting psychology stats:", error);
@@ -655,9 +655,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let questions;
       if (category && typeof category === 'string') {
-        questions = psychologyAgent.getQuestionsByCategory(category);
+        questions = await psychologyAgent.getQuestionsByCategory(category);
       } else {
-        questions = psychologyAgent.getAllPredefinedQuestions();
+        questions = await psychologyAgent.getAllPredefinedQuestions();
       }
       
       res.json({ questions });
@@ -683,6 +683,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error getting psychology categories:", error);
       res.status(500).json({ message: "Failed to get psychology categories" });
+    }
+  });
+
+  // Psychology questions management routes
+  app.post('/api/psychology/questions', isAuthenticated, async (req: any, res) => {
+    try {
+      const { question, category, orderIndex = 0 } = z.object({
+        question: z.string(),
+        category: z.string(),
+        orderIndex: z.number().optional()
+      }).parse(req.body);
+
+      const newQuestion = await storage.addPsychologyQuestion({
+        question,
+        category,
+        isActive: true,
+        orderIndex
+      });
+
+      res.json(newQuestion);
+    } catch (error) {
+      console.error("Error creating psychology question:", error);
+      res.status(500).json({ message: "Failed to create psychology question" });
+    }
+  });
+
+  app.put('/api/psychology/questions/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { question, category, isActive, orderIndex } = req.body;
+
+      const updatedQuestion = await storage.updatePsychologyQuestion(parseInt(id), {
+        question,
+        category,
+        isActive,
+        orderIndex
+      });
+
+      res.json(updatedQuestion);
+    } catch (error) {
+      console.error("Error updating psychology question:", error);
+      res.status(500).json({ message: "Failed to update psychology question" });
+    }
+  });
+
+  app.delete('/api/psychology/questions/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deletePsychologyQuestion(parseInt(id));
+      res.json({ message: "Psychology question deleted" });
+    } catch (error) {
+      console.error("Error deleting psychology question:", error);
+      res.status(500).json({ message: "Failed to delete psychology question" });
+    }
+  });
+
+  app.get('/api/psychology/questions/all', isAuthenticated, async (req: any, res) => {
+    try {
+      const questions = await storage.getPsychologyQuestions();
+      res.json(questions);
+    } catch (error) {
+      console.error("Error getting all psychology questions:", error);
+      res.status(500).json({ message: "Failed to get psychology questions" });
+    }
+  });
+
+  // User generated questions routes
+  app.get('/api/psychology/user-questions/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Only allow users to access their own questions
+      if (req.user.id !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const questions = await storage.getUserGeneratedQuestions(userId);
+      res.json(questions);
+    } catch (error) {
+      console.error("Error getting user generated questions:", error);
+      res.status(500).json({ message: "Failed to get user generated questions" });
     }
   });
 

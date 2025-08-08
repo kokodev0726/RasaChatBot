@@ -3,6 +3,7 @@ import { ConversationChain } from "langchain/chains";
 import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from "@langchain/core/prompts";
 import { BufferMemory } from "langchain/memory";
 import { getPsychologyConfig } from './psychology.config';
+import { storage } from './storage';
 
 const config = getPsychologyConfig();
 
@@ -20,20 +21,28 @@ interface UserSession {
   askedQuestions: string[];
   userResponses: Array<{ question: string; response: string; timestamp: Date }>;
   sessionStartTime: Date;
+  predefinedQuestions: string[];
+  personalizedQuestions: string[];
 }
 
 export class PsychologyAgent {
   private memoryStore: Map<string, BufferMemory> = new Map();
   private userSessions: Map<string, UserSession> = new Map();
 
-  private getOrCreateSession(userId: string): UserSession {
+  private async getOrCreateSession(userId: string): Promise<UserSession> {
     if (!this.userSessions.has(userId)) {
+      // Load predefined questions from database
+      const predefinedQuestions = await storage.getPsychologyQuestions();
+      const questionTexts = predefinedQuestions.map(q => q.question);
+      
       this.userSessions.set(userId, {
         userId,
         currentQuestionIndex: 0,
         askedQuestions: [],
         userResponses: [],
-        sessionStartTime: new Date()
+        sessionStartTime: new Date(),
+        predefinedQuestions: questionTexts,
+        personalizedQuestions: []
       });
     }
     return this.userSessions.get(userId)!;
@@ -50,11 +59,11 @@ export class PsychologyAgent {
     return this.memoryStore.get(userId)!;
   }
 
-  private getNextPredefinedQuestion(userId: string): string | null {
-    const session = this.getOrCreateSession(userId);
+  private async getNextPredefinedQuestion(userId: string): Promise<string | null> {
+    const session = await this.getOrCreateSession(userId);
     
-    if (session.currentQuestionIndex < config.predefinedQuestions.length) {
-      const question = config.predefinedQuestions[session.currentQuestionIndex];
+    if (session.currentQuestionIndex < session.predefinedQuestions.length) {
+      const question = session.predefinedQuestions[session.currentQuestionIndex];
       session.currentQuestionIndex++;
       session.askedQuestions.push(question);
       return question;
@@ -64,7 +73,7 @@ export class PsychologyAgent {
   }
 
   async* processMessage(userId: string, message: string): AsyncGenerator<string> {
-    const session = this.getOrCreateSession(userId);
+    const session = await this.getOrCreateSession(userId);
     const memory = this.getMemory(userId);
     
     // Store user response if it's a response to a question
@@ -99,53 +108,73 @@ export class PsychologyAgent {
     }
 
     // Determine next question
-    const nextQuestion = this.determineNextQuestion(userId);
+    const nextQuestion = await this.determineNextQuestion(userId);
     
     if (nextQuestion) {
       yield '\n\n' + nextQuestion;
     }
   }
 
-  private determineNextQuestion(userId: string): string | null {
-    const session = this.getOrCreateSession(userId);
+  private async determineNextQuestion(userId: string): Promise<string | null> {
+    const session = await this.getOrCreateSession(userId);
     
     // Continue with predefined questions
-    if (session.currentQuestionIndex < config.predefinedQuestions.length) {
-      return this.getNextPredefinedQuestion(userId);
+    if (session.currentQuestionIndex < session.predefinedQuestions.length) {
+      return await this.getNextPredefinedQuestion(userId);
+    }
+    
+    // Check for unused personalized questions
+    const unusedPersonalizedQuestions = await storage.getUnusedUserGeneratedQuestions(userId, 5);
+    if (unusedPersonalizedQuestions.length > 0) {
+      const question = unusedPersonalizedQuestions[0];
+      await storage.markUserGeneratedQuestionAsUsed(question.id);
+      session.askedQuestions.push(question.question);
+      return question.question;
     }
     
     // Generate personalized question if we have enough responses
     if (session.userResponses.length >= 3) {
-      return this.generatePersonalizedQuestion(userId);
+      return await this.generatePersonalizedQuestion(userId);
     }
     
     return null;
   }
 
-  private generatePersonalizedQuestion(userId: string): string {
-    const session = this.getOrCreateSession(userId);
+  private async generatePersonalizedQuestion(userId: string): Promise<string> {
+    const session = await this.getOrCreateSession(userId);
     
     const recentResponses = session.userResponses
       .slice(-3)
       .map(r => r.response)
       .join(' ');
 
-    // Simple personalized question based on recent responses
+    // Generate personalized question based on recent responses
+    let personalizedQuestion = "¿Qué aspecto de tu vida te gustaría explorar más profundamente?";
+    
     if (recentResponses.toLowerCase().includes('ansiedad') || recentResponses.toLowerCase().includes('estrés')) {
-      return "¿Podrías contarme más sobre cómo manejas la ansiedad en tu día a día?";
+      personalizedQuestion = "¿Podrías contarme más sobre cómo manejas la ansiedad en tu día a día?";
     } else if (recentResponses.toLowerCase().includes('familia') || recentResponses.toLowerCase().includes('relación')) {
-      return "¿Cómo te sientes con respecto a tus relaciones familiares en este momento?";
+      personalizedQuestion = "¿Cómo te sientes con respecto a tus relaciones familiares en este momento?";
     } else if (recentResponses.toLowerCase().includes('trabajo') || recentResponses.toLowerCase().includes('profesional')) {
-      return "¿Cómo afecta tu situación laboral a tu bienestar emocional?";
-    } else {
-      return "¿Qué aspecto de tu vida te gustaría explorar más profundamente?";
+      personalizedQuestion = "¿Cómo afecta tu situación laboral a tu bienestar emocional?";
     }
+
+    // Store the generated question in the database
+    await storage.addUserGeneratedQuestion({
+      userId,
+      question: personalizedQuestion,
+      category: 'personalized',
+      isUsed: false
+    });
+
+    session.askedQuestions.push(personalizedQuestion);
+    return personalizedQuestion;
   }
 
   private getUserContext(userId: string): string {
-    const session = this.getOrCreateSession(userId);
+    const session = this.userSessions.get(userId);
     
-    if (session.userResponses.length === 0) {
+    if (!session || session.userResponses.length === 0) {
       return "Esta es la primera sesión con el usuario.";
     }
 
@@ -157,12 +186,12 @@ export class PsychologyAgent {
     return `Información reciente del usuario:\n${recentResponses}`;
   }
 
-  getSessionStats(userId: string): {
+  async getSessionStats(userId: string): Promise<{
     totalQuestions: number;
     totalResponses: number;
     sessionDuration: number;
-  } {
-    const session = this.getOrCreateSession(userId);
+  }> {
+    const session = await this.getOrCreateSession(userId);
     const now = new Date();
     const sessionDuration = (now.getTime() - session.sessionStartTime.getTime()) / (1000 * 60);
     
@@ -178,11 +207,13 @@ export class PsychologyAgent {
     this.memoryStore.delete(userId);
   }
 
-  getAllPredefinedQuestions(): string[] {
-    return config.predefinedQuestions;
+  async getAllPredefinedQuestions(): Promise<string[]> {
+    const questions = await storage.getPsychologyQuestions();
+    return questions.map(q => q.question);
   }
 
-  getQuestionsByCategory(category: string): string[] {
-    return config.questionCategories[category] || [];
+  async getQuestionsByCategory(category: string): Promise<string[]> {
+    const questions = await storage.getPsychologyQuestionsByCategory(category);
+    return questions.map(q => q.question);
   }
 }

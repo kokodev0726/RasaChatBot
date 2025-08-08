@@ -15,6 +15,12 @@ import {
   relationships,
   type Relationship,
   type InsertRelationship,
+  psychologyQuestions,
+  userGeneratedQuestions,
+  type PsychologyQuestion,
+  type InsertPsychologyQuestion,
+  type UserGeneratedQuestion,
+  type InsertUserGeneratedQuestion,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
@@ -66,6 +72,24 @@ export interface IStorage {
   getRelationshipsForEntity(userId: string, entity: string): Promise<Relationship[]>;
   findRelationship(userId: string, entity1: string, entity2: string): Promise<Relationship[]>;
   inferRelationship(userId: string, entity1: string, entity2: string): Promise<string | null>;
+
+  // Psychology questions operations
+  addPsychologyQuestion(question: InsertPsychologyQuestion): Promise<PsychologyQuestion>;
+  getPsychologyQuestions(limit?: number): Promise<PsychologyQuestion[]>;
+  getPsychologyQuestionsByCategory(category: string): Promise<PsychologyQuestion[]>;
+  getPsychologyQuestionById(id: number): Promise<PsychologyQuestion | undefined>;
+  updatePsychologyQuestion(id: number, update: Partial<PsychologyQuestion>): Promise<PsychologyQuestion>;
+  deletePsychologyQuestion(id: number): Promise<void>;
+
+  // User generated questions operations
+  addUserGeneratedQuestion(question: InsertUserGeneratedQuestion): Promise<UserGeneratedQuestion>;
+  getUserGeneratedQuestions(userId?: string, limit?: number): Promise<UserGeneratedQuestion[]>;
+  getUserGeneratedQuestionsByCategory(userId: string, category: string): Promise<UserGeneratedQuestion[]>;
+  getUnusedUserGeneratedQuestions(userId: string, limit?: number): Promise<UserGeneratedQuestion[]>;
+  getUserGeneratedQuestionById(id: number): Promise<UserGeneratedQuestion | undefined>;
+  updateUserGeneratedQuestion(id: number, update: Partial<UserGeneratedQuestion>): Promise<UserGeneratedQuestion>;
+  markUserGeneratedQuestionAsUsed(id: number): Promise<UserGeneratedQuestion>;
+  deleteUserGeneratedQuestion(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -568,6 +592,150 @@ export class DatabaseStorage implements IStorage {
     
     // Default format if no special case matches
     return `${rel1}'s ${rel2}`;
+  }
+
+  // Psychology questions operations
+  async addPsychologyQuestion(question: InsertPsychologyQuestion): Promise<PsychologyQuestion> {
+    const [newQuestion] = await db
+      .insert(psychologyQuestions)
+      .values(question)
+      .returning();
+    return newQuestion;
+  }
+
+  async getPsychologyQuestions(limit?: number): Promise<PsychologyQuestion[]> {
+    const query = db
+      .select()
+      .from(psychologyQuestions)
+      .where(eq(psychologyQuestions.isActive, true))
+      .orderBy(psychologyQuestions.orderIndex, psychologyQuestions.createdAt);
+    
+    if (limit) {
+      return await query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  async getPsychologyQuestionsByCategory(category: string): Promise<PsychologyQuestion[]> {
+    return await db
+      .select()
+      .from(psychologyQuestions)
+      .where(and(eq(psychologyQuestions.category, category), eq(psychologyQuestions.isActive, true)))
+      .orderBy(psychologyQuestions.orderIndex, psychologyQuestions.createdAt);
+  }
+
+  async getPsychologyQuestionById(id: number): Promise<PsychologyQuestion | undefined> {
+    const [question] = await db
+      .select()
+      .from(psychologyQuestions)
+      .where(eq(psychologyQuestions.id, id));
+    return question;
+  }
+
+  async updatePsychologyQuestion(id: number, update: Partial<PsychologyQuestion>): Promise<PsychologyQuestion> {
+    const [updatedQuestion] = await db
+      .update(psychologyQuestions)
+      .set({ ...update, updatedAt: new Date() })
+      .where(eq(psychologyQuestions.id, id))
+      .returning();
+    return updatedQuestion;
+  }
+
+  async deletePsychologyQuestion(id: number): Promise<void> {
+    await db
+      .delete(psychologyQuestions)
+      .where(eq(psychologyQuestions.id, id));
+  }
+
+  // User generated questions operations
+  async addUserGeneratedQuestion(question: InsertUserGeneratedQuestion): Promise<UserGeneratedQuestion> {
+    const [newQuestion] = await db
+      .insert(userGeneratedQuestions)
+      .values(question)
+      .returning();
+    return newQuestion;
+  }
+
+  async getUserGeneratedQuestions(userId?: string, limit?: number): Promise<UserGeneratedQuestion[]> {
+    if (userId) {
+      const query = db
+        .select()
+        .from(userGeneratedQuestions)
+        .where(eq(userGeneratedQuestions.userId, userId))
+        .orderBy(desc(userGeneratedQuestions.createdAt));
+      
+      if (limit) {
+        return await query.limit(limit);
+      }
+      
+      return await query;
+    } else {
+      const query = db
+        .select()
+        .from(userGeneratedQuestions)
+        .orderBy(desc(userGeneratedQuestions.createdAt));
+      
+      if (limit) {
+        return await query.limit(limit);
+      }
+      
+      return await query;
+    }
+  }
+
+  async getUserGeneratedQuestionsByCategory(userId: string, category: string): Promise<UserGeneratedQuestion[]> {
+    return await db
+      .select()
+      .from(userGeneratedQuestions)
+      .where(and(eq(userGeneratedQuestions.userId, userId), eq(userGeneratedQuestions.category, category)))
+      .orderBy(desc(userGeneratedQuestions.createdAt));
+  }
+
+  async getUnusedUserGeneratedQuestions(userId: string, limit?: number): Promise<UserGeneratedQuestion[]> {
+    const query = db
+      .select()
+      .from(userGeneratedQuestions)
+      .where(and(eq(userGeneratedQuestions.userId, userId), eq(userGeneratedQuestions.isUsed, false)))
+      .orderBy(userGeneratedQuestions.createdAt);
+    
+    if (limit) {
+      return await query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  async getUserGeneratedQuestionById(id: number): Promise<UserGeneratedQuestion | undefined> {
+    const [question] = await db
+      .select()
+      .from(userGeneratedQuestions)
+      .where(eq(userGeneratedQuestions.id, id));
+    return question;
+  }
+
+  async updateUserGeneratedQuestion(id: number, update: Partial<UserGeneratedQuestion>): Promise<UserGeneratedQuestion> {
+    const [updatedQuestion] = await db
+      .update(userGeneratedQuestions)
+      .set(update)
+      .where(eq(userGeneratedQuestions.id, id))
+      .returning();
+    return updatedQuestion;
+  }
+
+  async markUserGeneratedQuestionAsUsed(id: number): Promise<UserGeneratedQuestion> {
+    const [updatedQuestion] = await db
+      .update(userGeneratedQuestions)
+      .set({ isUsed: true, usedAt: new Date() })
+      .where(eq(userGeneratedQuestions.id, id))
+      .returning();
+    return updatedQuestion;
+  }
+
+  async deleteUserGeneratedQuestion(id: number): Promise<void> {
+    await db
+      .delete(userGeneratedQuestions)
+      .where(eq(userGeneratedQuestions.id, id));
   }
 }
 

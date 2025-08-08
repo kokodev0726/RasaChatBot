@@ -5,6 +5,7 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { streamChatCompletion, transcribeAudio, generateChatTitle, extractAndStoreUserInfo } from "./openai";
 import { langChainAgent, langChainConversation, langChainChains } from "./langchain";
 import { toolExecutor } from "./langchain.tools";
+import { PsychologyAgent } from "./psychology";
 import { insertChatSchema, insertMessageSchema } from "@shared/schema";
 import multer from "multer";
 import { z } from "zod";
@@ -538,6 +539,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: 'LangChain connection failed',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+    }
+  });
+
+  // Psychology Agent routes
+  const psychologyAgent = new PsychologyAgent();
+
+  // Psychology chat streaming
+  app.post('/api/psychology/stream', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { message, chatId } = z.object({ 
+        message: z.string(),
+        chatId: z.number().optional()
+      }).parse(req.body);
+
+      // Verify chat ownership if chatId is provided
+      if (chatId) {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== userId) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Save user message if chatId is provided
+      if (chatId) {
+        await storage.createMessage({
+          chatId,
+          userId,
+          content: message,
+          role: "user",
+        });
+      }
+
+      // Set up streaming response
+      res.writeHead(200, {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      let fullResponse = "";
+
+      try {
+        // Use psychology agent for response generation
+        const stream = psychologyAgent.processMessage(userId, message);
+        
+        for await (const chunk of stream) {
+          fullResponse += chunk;
+          res.write(chunk);
+        }
+        
+        // Save AI response if chatId is provided
+        if (chatId) {
+          await storage.createMessage({
+            chatId,
+            userId,
+            content: fullResponse,
+            role: "assistant",
+          });
+        }
+        
+        res.end();
+      } catch (streamError) {
+        console.error("Psychology streaming error:", streamError);
+        res.write("Error: Failed to generate psychology response");
+        res.end();
+      }
+    } catch (error) {
+      console.error("Error in psychology streaming endpoint:", error);
+      res.status(500).json({ message: "Failed to process psychology message" });
+    }
+  });
+
+  // Get psychology session statistics
+  app.get('/api/psychology/stats/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Only allow users to access their own stats
+      if (req.user.id !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const stats = psychologyAgent.getSessionStats(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error getting psychology stats:", error);
+      res.status(500).json({ message: "Failed to get psychology stats" });
+    }
+  });
+
+  // Reset psychology session
+  app.delete('/api/psychology/session/:userId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Only allow users to reset their own session
+      if (req.user.id !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      psychologyAgent.resetSession(userId);
+      res.json({ message: "Psychology session reset" });
+    } catch (error) {
+      console.error("Error resetting psychology session:", error);
+      res.status(500).json({ message: "Failed to reset psychology session" });
+    }
+  });
+
+  // Get predefined psychology questions
+  app.get('/api/psychology/questions', isAuthenticated, async (req: any, res) => {
+    try {
+      const { category } = req.query;
+      
+      let questions;
+      if (category && typeof category === 'string') {
+        questions = psychologyAgent.getQuestionsByCategory(category);
+      } else {
+        questions = psychologyAgent.getAllPredefinedQuestions();
+      }
+      
+      res.json({ questions });
+    } catch (error) {
+      console.error("Error getting psychology questions:", error);
+      res.status(500).json({ message: "Failed to get psychology questions" });
+    }
+  });
+
+  // Get psychology question categories
+  app.get('/api/psychology/categories', isAuthenticated, async (req: any, res) => {
+    try {
+      const categories = [
+        'initial_assessment',
+        'coping_mechanisms', 
+        'social_support',
+        'past_experiences',
+        'emotional_wellbeing',
+        'goals_and_motivation',
+        'self_awareness'
+      ];
+      res.json({ categories });
+    } catch (error) {
+      console.error("Error getting psychology categories:", error);
+      res.status(500).json({ message: "Failed to get psychology categories" });
     }
   });
 

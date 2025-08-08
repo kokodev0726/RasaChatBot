@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import Auth from "@/pages/auth";
 import Home from "@/pages/home";
 import Settings from "@/pages/settings";
+import Psychology from "@/pages/psychology";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -21,6 +22,8 @@ function Router() {
         <>
           <Route path="/" component={Home} />
           <Route path="/chat/:chatId" component={Home} />
+          <Route path="/psychology" component={Psychology} />
+          <Route path="/psychology/:chatId" component={Psychology} />
           <Route path="/settings" component={Settings} />
         </>
       )}

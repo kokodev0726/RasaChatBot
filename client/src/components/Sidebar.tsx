@@ -18,7 +18,8 @@ import {
   Trash2,
   Menu,
   X,
-  Zap
+  Zap,
+  Brain
 } from "lucide-react";
 import type { Chat } from "@shared/schema";
 
@@ -233,6 +234,15 @@ export default function Sidebar() {
                 <Zap className="h-4 w-4" />
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation('/psychology')}
+              className="h-8 w-8 p-0"
+              title="Psychology Agent"
+            >
+              <Brain className="h-4 w-4" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"

@@ -25,6 +25,7 @@ interface UserSession {
   sessionStartTime: Date;
   predefinedQuestions: string[];
   personalizedQuestions: string[];
+  hasGreeted?: boolean;
 }
 
 export class PsychologyAgent {
@@ -44,7 +45,8 @@ export class PsychologyAgent {
         userResponses: [],
         sessionStartTime: new Date(),
         predefinedQuestions: questionTexts,
-        personalizedQuestions: []
+        personalizedQuestions: [],
+        hasGreeted: false
       });
     }
     return this.userSessions.get(userId)!;
@@ -196,11 +198,15 @@ export class PsychologyAgent {
       yield chunk.response;
     }
 
-    // Determine next question
-    const nextQuestion = await this.determineNextQuestion(userId);
-    
-    if (nextQuestion) {
-      yield '\n\n' + nextQuestion;
+    // Mark that initial greeting/response has been sent
+    session.hasGreeted = true;
+
+    // Determine next question only after the user has answered at least one prior question
+    if (session.userResponses.length > 0) {
+      const nextQuestion = await this.determineNextQuestion(userId);
+      if (nextQuestion) {
+        yield '\n\n' + nextQuestion;
+      }
     }
 
     // Create embedding for future reference (integrate with LangChain system)

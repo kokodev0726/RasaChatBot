@@ -22,8 +22,8 @@ function Router() {
         <>
           <Route path="/" component={Home} />
           <Route path="/chat/:chatId" component={Home} />
-          <Route path="/psychology" component={Psychology} />
-          <Route path="/psychology/:chatId" component={Psychology} />
+          <Route path="/psychology" component={Home} />
+          <Route path="/psychology/:chatId" component={Home} />
           <Route path="/settings" component={Settings} />
         </>
       )}

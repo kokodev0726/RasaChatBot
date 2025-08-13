@@ -131,14 +131,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Streaming chat completion with LangChain
+  // Streaming chat completion - now uses Psychology Agent only
   app.post('/api/chats/:chatId/stream', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const chatId = parseInt(req.params.chatId);
-      const { message, useLangChain = true } = z.object({ 
-        message: z.string(),
-        useLangChain: z.boolean().optional()
+      const { message } = z.object({ 
+        message: z.string()
       }).parse(req.body);
       
       // Verify chat ownership
@@ -165,49 +164,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let fullResponse = "";
       
       try {
-        if (useLangChain) {
-          // Use LangChain for response generation
-          const stream = langChainAgent.processMessage(userId, message, chatId);
-          
-          for await (const chunk of stream) {
-            fullResponse += chunk;
-            res.write(chunk);
-          }
-        } else {
-          // Fallback to OpenAI
-          const rasa_response = await fetch('http://187.33.155.76:3003/webhooks/rest/webhook', {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'charset': 'UTF-8',
-            },
-            credentials: "same-origin",
-            body: JSON.stringify({
-              "sender": "user",
-              "message": message,
-              "metadata": {
-                "user_id": userId
-              }
-            }),
-          });
-
-          console.log(rasa_response);
-          
-          // Prepare messages for OpenAI
-          const messages = chat.messages.map(msg => ({
-            role: msg.role as "user" | "assistant",
-            content: msg.content,
-          }));
-          
-          // Add new user message
-          messages.push({ role: "user", content: message });
-          
-          // Stream the response using OpenAI
-          for await (const chunk of streamChatCompletion(messages, userId)) {
-            fullResponse += chunk;
-            res.write(chunk);
-          }
+        // Always use Psychology Agent (integrated with all capabilities)
+        const stream = psychologyAgent.processMessage(userId, message, chatId);
+        
+        for await (const chunk of stream) {
+          fullResponse += chunk;
+          res.write(chunk);
         }
         
         // Save AI response
@@ -223,15 +185,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Update chat title if this is the first message
         if (chat.messages.length === 0) {
-          const title = useLangChain 
-            ? await langChainChains.generateChatTitle([message])
-            : await generateChatTitle([{ role: "user", content: message }]);
+          const title = await psychologyAgent.generateChatTitle([message]);
           await storage.updateChatTitle(chatId, title);
         }
         
         res.end();
       } catch (streamError) {
-        console.error("Streaming error:", streamError);
+        console.error("Psychology streaming error:", streamError);
         res.write("Error: Failed to generate response");
         res.end();
       }
@@ -256,14 +216,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // LangChain specific routes
+  // LangChain specific routes - now redirected to Psychology Agent
   app.post('/api/langchain/stream', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { message, chatId, useAgent = true } = z.object({ 
+      const { message, chatId } = z.object({ 
         message: z.string(),
-        chatId: z.number().optional(),
-        useAgent: z.boolean().optional()
+        chatId: z.number().optional()
       }).parse(req.body);
 
       // Verify chat ownership if chatId is provided
@@ -294,10 +253,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let fullResponse = "";
 
       try {
-        // Use LangChain agent or conversation based on preference
-        const stream = useAgent 
-          ? langChainAgent.processMessage(userId, message, chatId)
-          : langChainConversation.streamConversation(userId, message);
+        // Use Psychology Agent (integrated with all LangChain capabilities)
+        const stream = psychologyAgent.processMessage(userId, message, chatId);
 
         for await (const chunk of stream) {
           fullResponse += chunk;
@@ -316,25 +273,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.end();
       } catch (streamError) {
-        console.error("LangChain streaming error:", streamError);
+        console.error("Psychology streaming error:", streamError);
         res.write("Error: Failed to generate response");
         res.end();
       }
     } catch (error) {
-      console.error("Error in LangChain streaming endpoint:", error);
+      console.error("Error in Psychology streaming endpoint:", error);
       res.status(500).json({ message: "Failed to process message" });
     }
   });
 
-  // LangChain-only chat endpoint (for when you want to force LangChain usage)
+  // LangChain-only chat endpoint - now redirected to Psychology Agent
   app.post('/api/langchain/chat', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { message, chatId, useAgent = true, extractInfo = true } = z.object({ 
+      const { message, chatId } = z.object({ 
         message: z.string(),
-        chatId: z.number().optional(),
-        useAgent: z.boolean().optional(),
-        extractInfo: z.boolean().optional()
+        chatId: z.number().optional()
       }).parse(req.body);
 
       // Verify chat ownership if chatId is provided
@@ -356,16 +311,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Extract user information if enabled
-      if (extractInfo) {
-        const extractedInfo = await langChainChains.extractUserInfo(message);
-        for (const [key, value] of Object.entries(extractedInfo)) {
-          if (value && value.trim()) {
-            await storage.setUserContext(userId, key, value);
-          }
-        }
-      }
-
       // Set up streaming response
       res.writeHead(200, {
         'Content-Type': 'text/plain',
@@ -376,10 +321,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let fullResponse = "";
 
       try {
-        // Always use LangChain for this endpoint
-        const stream = useAgent 
-          ? langChainAgent.processMessage(userId, message, chatId)
-          : langChainConversation.streamConversation(userId, message);
+        // Use Psychology Agent (includes all LangChain capabilities)
+        const stream = psychologyAgent.processMessage(userId, message, chatId);
 
         for await (const chunk of stream) {
           fullResponse += chunk;
@@ -400,39 +343,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Update chat title if this is the first message
           if (chat && chat.messages.length === 0) {
-            const title = await langChainChains.generateChatTitle([message]);
+            const title = await psychologyAgent.generateChatTitle([message]);
             await storage.updateChatTitle(chatId, title);
           }
         }
 
         res.end();
       } catch (streamError) {
-        console.error("LangChain chat error:", streamError);
+        console.error("Psychology chat error:", streamError);
         res.write("Error: Failed to generate response");
         res.end();
       }
     } catch (error) {
-      console.error("Error in LangChain chat endpoint:", error);
+      console.error("Error in Psychology chat endpoint:", error);
       res.status(500).json({ message: "Failed to process message" });
     }
   });
 
-  // LangChain title generation
+  // LangChain title generation - now uses Psychology Agent
   app.post('/api/langchain/title', isAuthenticated, async (req: any, res) => {
     try {
       const { messages } = z.object({ 
         messages: z.array(z.string())
       }).parse(req.body);
 
-      const title = await langChainChains.generateChatTitle(messages);
+      const title = await psychologyAgent.generateChatTitle(messages);
       res.json({ title });
     } catch (error) {
-      console.error("Error generating title with LangChain:", error);
+      console.error("Error generating title with Psychology Agent:", error);
       res.status(500).json({ message: "Failed to generate title" });
     }
   });
 
-  // LangChain user info extraction
+  // LangChain user info extraction - now uses Psychology Agent
   app.post('/api/langchain/extract-info', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -440,7 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: z.string()
       }).parse(req.body);
 
-      const extractedInfo = await langChainChains.extractUserInfo(message);
+      const extractedInfo = await psychologyAgent.extractUserInfo(message);
       
       // Store extracted information
       for (const [key, value] of Object.entries(extractedInfo)) {
@@ -451,12 +394,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ extractedInfo });
     } catch (error) {
-      console.error("Error extracting user info with LangChain:", error);
+      console.error("Error extracting user info with Psychology Agent:", error);
       res.status(500).json({ message: "Failed to extract user information" });
     }
   });
 
-  // LangChain memory management
+  // LangChain memory management - now uses Psychology Agent
   app.delete('/api/langchain/memory/:userId', isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
@@ -466,19 +409,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Clear memory (this would need to be implemented in the LangChain service)
-      res.json({ message: "Memory cleared" });
+      // Clear all memory using Psychology Agent
+      psychologyAgent.clearAllMemory(userId);
+      res.json({ message: "All memory cleared" });
     } catch (error) {
       console.error("Error clearing memory:", error);
       res.status(500).json({ message: "Failed to clear memory" });
     }
   });
 
-  // LangChain tools routes
+  // LangChain tools routes - now uses Psychology Agent
   app.get('/api/langchain/tools', isAuthenticated, async (req: any, res) => {
     try {
-      const availableTools = toolExecutor.getAvailableTools();
-      const toolDescriptions = toolExecutor.getToolDescriptions();
+      const availableTools = await psychologyAgent.getAvailableTools();
+      const toolDescriptions = await psychologyAgent.getToolDescriptions();
       
       res.json({
         availableTools,
@@ -497,7 +441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         input: z.string(),
       }).parse(req.body);
 
-      const result = await toolExecutor.executeTool(toolName, input);
+      const result = await psychologyAgent.executeTool(toolName, input);
       res.json({ result });
     } catch (error) {
       console.error("Error executing tool:", error);
@@ -505,16 +449,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // LangChain connection test
+  // LangChain connection test - now uses Psychology Agent
   app.get('/api/langchain/test-connection', isAuthenticated, async (req: any, res) => {
     try {
-      // Test if LangChain components are working
+      // Test if Psychology Agent (with integrated LangChain) is working
       const testMessage = "Test connection";
       const testUserId = req.user.id;
       
       // Try to generate a simple response
       let responseChunks = [];
-      for await (const chunk of langChainAgent.processMessage(testUserId, testMessage)) {
+      for await (const chunk of psychologyAgent.processMessage(testUserId, testMessage)) {
         responseChunks.push(chunk);
       }
       
@@ -523,20 +467,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (response && response.length > 0) {
         res.json({ 
           connected: true, 
-          message: 'LangChain is working properly',
+          message: 'Psychology Agent is working properly',
           testResponse: response.substring(0, 100) + '...'
         });
       } else {
         res.json({ 
           connected: false, 
-          message: 'LangChain is not responding properly' 
+          message: 'Psychology Agent is not responding properly' 
         });
       }
     } catch (error) {
-      console.error('Error testing LangChain connection:', error);
+      console.error('Error testing Psychology Agent connection:', error);
       res.json({ 
         connected: false, 
-        message: 'LangChain connection failed',
+        message: 'Psychology Agent connection failed',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -545,7 +489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Psychology Agent routes
   const psychologyAgent = new PsychologyAgent();
 
-  // Psychology chat streaming
+  // Psychology chat streaming - now uses integrated Psychology Agent
   app.post('/api/psychology/stream', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -582,8 +526,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let fullResponse = "";
 
       try {
-        // Use psychology agent for response generation
-        const stream = psychologyAgent.processMessage(userId, message);
+        // Use integrated psychology agent (includes all LangChain capabilities)
+        const stream = psychologyAgent.processMessage(userId, message, chatId);
         
         for await (const chunk of stream) {
           fullResponse += chunk;
@@ -598,6 +542,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             content: fullResponse,
             role: "assistant",
           });
+
+          // Create embedding for future reference
+          await storage.createEmbedding(userId, message, fullResponse);
         }
         
         res.end();
@@ -630,7 +577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Reset psychology session
+  // Reset psychology session - now clears all integrated memory
   app.delete('/api/psychology/session/:userId', isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
@@ -640,8 +587,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      psychologyAgent.resetSession(userId);
-      res.json({ message: "Psychology session reset" });
+      psychologyAgent.clearAllMemory(userId);
+      res.json({ message: "All psychology and LangChain memory cleared" });
     } catch (error) {
       console.error("Error resetting psychology session:", error);
       res.status(500).json({ message: "Failed to reset psychology session" });

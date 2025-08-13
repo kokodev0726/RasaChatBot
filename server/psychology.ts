@@ -4,6 +4,8 @@ import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemp
 import { BufferMemory } from "langchain/memory";
 import { getPsychologyConfig } from './psychology.config';
 import { storage } from './storage';
+import { langChainAgent, langChainChains } from './langchain';
+import { toolExecutor } from './langchain.tools';
 
 const config = getPsychologyConfig();
 
@@ -72,9 +74,8 @@ export class PsychologyAgent {
     return null;
   }
 
-  async* processMessage(userId: string, message: string): AsyncGenerator<string> {
+  async* processMessage(userId: string, message: string, chatId?: number): AsyncGenerator<string> {
     const session = await this.getOrCreateSession(userId);
-    const memory = this.getMemory(userId);
     
     // Store user response if it's a response to a question
     if (session.askedQuestions.length > 0 && session.askedQuestions.length > session.userResponses.length) {
@@ -86,14 +87,102 @@ export class PsychologyAgent {
       });
     }
 
-    // Create conversation chain
-    const systemPrompt = config.systemPrompt.replace('{context}', this.getUserContext(userId));
+    // Check for relationship questions first (integrate LangChain agent capabilities)
+    const relationshipQuestionPattern = /(?:qué|cuál|cual)\s+(?:es|sería|seria)\s+(?:la\s+)?relaci[oó]n\s+(?:entre|de)\s+(\w+)\s+(?:y|con)\s+(\w+)/i;
+    const specificRelationshipPattern = /(?:quién|quien|quiénes|quienes|donde|dónde|cuál|cual)\s+(?:es|son|está|esta)\s+(?:mi|mis|tu|tus|su|sus)\s+(\w+)/i;
+    
+    const directMatch = message.match(relationshipQuestionPattern);
+    const specificMatch = message.match(specificRelationshipPattern);
+    
+    // Handle relationship questions using LangChain tools
+    if (directMatch) {
+      const entity1 = directMatch[1];
+      const entity2 = directMatch[2];
+      
+      try {
+        const relationshipResult = await toolExecutor.executeTool(
+          "infer_relationship",
+          `${userId}:${entity1}:${entity2}`
+        );
+        
+        if (!relationshipResult.includes("No relationship found")) {
+          const relationshipParts = relationshipResult.split(': ');
+          if (relationshipParts.length > 1) {
+            const relationship = relationshipParts[1];
+            const response = `Desde una perspectiva psicológica, entiendo que ${entity2} es ${relationship} de ${entity1}. ¿Cómo te sientes acerca de esta relación? ¿Hay algo específico que te gustaría explorar sobre esta dinámica familiar?`;
+            yield response;
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error inferring relationship:', error);
+      }
+    }
+    
+    if (specificMatch) {
+      const relationshipType = specificMatch[1].toLowerCase();
+      
+      try {
+        const relationships = await storage.getRelationships(userId);
+        const matchingRelationships = relationships.filter(rel => {
+          return (
+            (rel.entity1.toLowerCase() === 'yo' || rel.entity1.toLowerCase() === 'me') &&
+            rel.relationship.toLowerCase().includes(relationshipType.toLowerCase())
+          );
+        });
+        
+        if (matchingRelationships.length > 0) {
+          const familyMembers = matchingRelationships.map(rel => rel.entity2).join(', ');
+          const response = `Entiendo que tu ${relationshipType} es ${familyMembers}. Desde una perspectiva terapéutica, me gustaría saber más sobre esta relación. ¿Cómo describirías tu vínculo con ${familyMembers}?`;
+          yield response;
+          return;
+        }
+      } catch (error) {
+        console.error('Error processing relationship query:', error);
+      }
+    }
+
+    // Extract user information using LangChain
+    try {
+      const extractedInfo = await langChainChains.extractUserInfo(message);
+      for (const [key, value] of Object.entries(extractedInfo)) {
+        if (value && value.trim()) {
+          await storage.setUserContext(userId, key, value);
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting user info:', error);
+    }
+
+    // Get context from LangChain agent for better understanding
+    let contextSnippets = '';
+    try {
+      contextSnippets = await langChainAgent.getUserChatHistory(userId, 0);
+      
+      // Get similar conversations for additional context
+      const similarEmbeddings = await storage.getSimilarEmbeddings(userId, message, 3);
+      if (similarEmbeddings.length > 0) {
+        const similarConversations = similarEmbeddings
+          .map(s => `Usuario: ${s.user_input}\nAsistente: ${s.bot_output}`)
+          .join('\n\n');
+        contextSnippets += '\n\nConversaciones similares:\n' + similarConversations;
+      }
+    } catch (error) {
+      console.error('Error getting context:', error);
+    }
+
+    // Create enhanced psychology prompt with context
+    const enhancedContext = this.getUserContext(userId) + '\n\n' + contextSnippets;
+    const systemPrompt = config.systemPrompt.replace('{context}', enhancedContext);
     
     const prompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(systemPrompt),
       HumanMessagePromptTemplate.fromTemplate("{input}"),
     ]);
 
+    // Use LangChain memory system for better continuity
+    const memory = this.getMemory(userId);
+    
     const conversationChain = new ConversationChain({
       llm: psychologyLLM,
       memory,
@@ -112,6 +201,17 @@ export class PsychologyAgent {
     
     if (nextQuestion) {
       yield '\n\n' + nextQuestion;
+    }
+
+    // Create embedding for future reference (integrate with LangChain system)
+    try {
+      const fullResponse = session.userResponses.length > 0 ? 
+        session.userResponses[session.userResponses.length - 1].response : '';
+      if (fullResponse) {
+        await storage.createEmbedding(userId, message, fullResponse);
+      }
+    } catch (error) {
+      console.error('Error creating embedding:', error);
     }
   }
 
@@ -215,5 +315,37 @@ export class PsychologyAgent {
   async getQuestionsByCategory(category: string): Promise<string[]> {
     const questions = await storage.getPsychologyQuestionsByCategory(category);
     return questions.map(q => q.question);
+  }
+
+  // Integrated LangChain capabilities
+  async getAvailableTools(): Promise<string[]> {
+    return toolExecutor.getAvailableTools();
+  }
+
+  async getToolDescriptions(): Promise<Record<string, string>> {
+    return toolExecutor.getToolDescriptions();
+  }
+
+  async executeTool(toolName: string, input: string): Promise<string> {
+    return await toolExecutor.executeTool(toolName, input);
+  }
+
+  async generateChatTitle(messages: string[]): Promise<string> {
+    return await langChainChains.generateChatTitle(messages);
+  }
+
+  async extractUserInfo(message: string): Promise<Record<string, string>> {
+    return await langChainChains.extractUserInfo(message);
+  }
+
+  // Clear both psychology and LangChain memory
+  clearAllMemory(userId: string): void {
+    this.resetSession(userId);
+    // Also clear LangChain memory if available
+    try {
+      langChainAgent.conversation.memoryManager.clearMemory(userId);
+    } catch (error) {
+      console.error('Error clearing LangChain memory:', error);
+    }
   }
 }

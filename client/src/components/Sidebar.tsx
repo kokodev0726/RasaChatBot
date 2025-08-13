@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
-import { useLangChain } from "@/contexts/LangChainContext";
+
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
@@ -32,7 +32,6 @@ export default function Sidebar() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { config: langChainConfig, isConnected } = useLangChain();
 
   // Extract current chat ID from location
   const currentChatId = location.startsWith('/chat/') 
@@ -224,22 +223,11 @@ export default function Sidebar() {
                 <Moon className="h-4 w-4" />
               )}
             </Button>
-            {langChainConfig.enabled && isConnected && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-blue-500"
-                title="LangChain Active"
-              >
-                <Zap className="h-4 w-4" />
-              </Button>
-            )}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setLocation('/psychology')}
-              className="h-8 w-8 p-0"
-              title="Psychology Agent"
+              className="h-8 w-8 p-0 text-purple-500"
+              title="Psychology + LangChain Active"
             >
               <Brain className="h-4 w-4" />
             </Button>
@@ -260,10 +248,10 @@ export default function Sidebar() {
         <Button
           onClick={handleCreateNewChat}
           disabled={createChatMutation.isPending}
-          className="w-full bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white"
+          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
         >
           <Plus className="w-4 h-4 mr-2" />
-            Nuevo chat
+            Nueva sesión de psicología
         </Button>
       </div>
 
@@ -271,7 +259,7 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto px-4">
         <div className="space-y-2">
           <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3">
-            Recent Chats
+            Sesiones de Psicología
           </h4>
           
           {isLoading ? (
@@ -287,7 +275,7 @@ export default function Sidebar() {
             <div className="text-center py-8">
               <MessageSquare className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-3" />
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Aún no hay chats. ¡Inicia una nueva conversación!
+                Aún no hay sesiones. ¡Inicia una nueva sesión de psicología!
               </p>
             </div>
           ) : (

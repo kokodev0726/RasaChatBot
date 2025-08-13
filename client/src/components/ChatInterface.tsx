@@ -5,8 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
-import { LangChainService } from "@/lib/langchainService";
-import { useLangChain } from "@/contexts/LangChainContext";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -24,7 +23,6 @@ export default function ChatInterface() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { config: langChainConfig, isConnected } = useLangChain();
 
   const { data: chat, isLoading, error } = useQuery<ChatWithMessages>({
     queryKey: ["/api/chats", chatId],
@@ -76,65 +74,39 @@ export default function ChatInterface() {
       setIsStreaming(true);
       setStreamingMessage("");
       
-      // Use LangChain if enabled and connected, otherwise fall back to OpenAI
-      if (langChainConfig.enabled && isConnected) {
-        return new Promise<string>((resolve, reject) => {
-          // Use the dedicated LangChain chat endpoint for better integration
-          LangChainService.streamLangChainChat(
-            messageContent,
-            (chunk) => {
-              setStreamingMessage(prev => prev + chunk);
-            },
-            (fullResponse) => {
-              setIsStreaming(false);
-              setStreamingMessage("");
-              resolve(fullResponse);
-            },
-            (error) => {
-              setIsStreaming(false);
-              setStreamingMessage("");
-              reject(error);
-            },
-            parseInt(chatId),
-            langChainConfig.useAgent,
-            langChainConfig.autoExtractInfo
-          );
-        });
-      } else {
-        // Fallback to OpenAI
-        const response = await fetch(`/api/chats/${chatId}/stream`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({ message: messageContent }),
-        });
+      // Always use Psychology Agent (integrated with all capabilities)
+      const response = await fetch(`/api/chats/${chatId}/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ message: messageContent }),
+      });
 
-        if (!response.ok) {
-          throw new Error(`${response.status}: ${response.statusText}`);
-        }
-
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        let fullResponse = "";
-
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            fullResponse += chunk;
-            setStreamingMessage(fullResponse);
-          }
-        }
-
-        setIsStreaming(false);
-        setStreamingMessage("");
-        
-        return fullResponse;
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
       }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          fullResponse += chunk;
+          setStreamingMessage(fullResponse);
+        }
+      }
+
+      setIsStreaming(false);
+      setStreamingMessage("");
+      
+      return fullResponse;
     },
     onSuccess: (aiMessageContent: string) => {
       // Add AI message to localMessages
@@ -227,10 +199,10 @@ export default function ChatInterface() {
             <Bot className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">
-            Bienvenido al chat de RASA AI
+            Bienvenido al Psychology AI Assistant
           </h2>
           <p className="text-slate-600 dark:text-slate-400 mb-6">
-            Selecciona una conversación en la barra lateral o crea una nueva para comenzar.
+            Tu asistente de psicología integrado con capacidades avanzadas de IA. Selecciona una conversación o crea una nueva para comenzar.
           </p>
         </div>
       </div>
@@ -250,19 +222,17 @@ export default function ChatInterface() {
             </Avatar>
             <div>
               <h2 className="font-semibold text-slate-800 dark:text-slate-200">
-                Asistente de Rasa AI
+                Psychology AI Assistant
               </h2>
               <div className="flex items-center gap-2">
                 <p className="text-xs text-emerald-500 flex items-center">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
                   En línea
                 </p>
-                {langChainConfig.enabled && isConnected && (
-                  <div className="flex items-center gap-1 text-xs text-blue-500">
-                    <Zap className="w-3 h-3" />
-                    <span>LangChain</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1 text-xs text-purple-500">
+                  <Zap className="w-3 h-3" />
+                  <span>Psychology + LangChain</span>
+                </div>
               </div>
             </div>
           </div>

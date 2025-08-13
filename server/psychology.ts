@@ -191,34 +191,75 @@ export class PsychologyAgent {
       prompt,
     });
 
-    // Generate response
-    const responseStream = await conversationChain.stream({ input: message });
-    
-    for await (const chunk of responseStream) {
-      yield chunk.response;
-    }
-
-    // Mark that initial greeting/response has been sent
-    session.hasGreeted = true;
-
-    // Determine next question only after the user has answered at least one prior question
-    if (session.userResponses.length > 0) {
-      const nextQuestion = await this.determineNextQuestion(userId);
-      if (nextQuestion) {
-        yield '\n\n' + nextQuestion;
-      }
-    }
-
-    // Create embedding for future reference (integrate with LangChain system)
+    // Generate response with error handling
     try {
-      const fullResponse = session.userResponses.length > 0 ? 
-        session.userResponses[session.userResponses.length - 1].response : '';
-      if (fullResponse) {
-        await storage.createEmbedding(userId, message, fullResponse);
+      const responseStream = await conversationChain.stream({ input: message });
+      
+      for await (const chunk of responseStream) {
+        yield chunk.response;
+      }
+
+      // Mark that initial greeting/response has been sent
+      session.hasGreeted = true;
+
+      // Determine next question only after the user has answered at least one prior question
+      if (session.userResponses.length > 0) {
+        const nextQuestion = await this.determineNextQuestion(userId);
+        if (nextQuestion) {
+          yield '\n\n' + nextQuestion;
+        }
+      }
+
+      // Create embedding for future reference (integrate with LangChain system)
+      try {
+        const fullResponse = session.userResponses.length > 0 ? 
+          session.userResponses[session.userResponses.length - 1].response : '';
+        if (fullResponse) {
+          await storage.createEmbedding(userId, message, fullResponse);
+        }
+      } catch (error) {
+        console.error('Error creating embedding:', error);
       }
     } catch (error) {
-      console.error('Error creating embedding:', error);
+      console.error('Psychology streaming error:', error);
+      
+      // Check if it's a geographic restriction error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('unsupported_country_region_territory')) {
+        yield this.getFallbackResponse(message, session);
+      } else {
+        yield "Lo siento, estoy teniendo dificultades técnicas en este momento. ¿Podrías intentar de nuevo en unos momentos?";
+      }
     }
+  }
+
+  private getFallbackResponse(message: string, session: UserSession): string {
+    // Simple fallback responses when OpenAI is not available
+    const lowerMessage = message.toLowerCase();
+    
+    // Check for common patterns and provide appropriate responses
+    if (lowerMessage.includes('hola') || lowerMessage.includes('buenos días') || lowerMessage.includes('buenas')) {
+      return "¡Hola! Me alegra verte. ¿Cómo te sientes hoy?";
+    }
+    
+    if (lowerMessage.includes('estrés') || lowerMessage.includes('ansiedad') || lowerMessage.includes('preocupado')) {
+      return "Entiendo que te sientes estresado/a. Es una sensación muy común. ¿Puedes contarme más sobre qué está causando este estrés en tu vida?";
+    }
+    
+    if (lowerMessage.includes('triste') || lowerMessage.includes('deprimido') || lowerMessage.includes('mal')) {
+      return "Es completamente normal sentirse así a veces. ¿Desde cuándo te has estado sintiendo de esta manera?";
+    }
+    
+    if (lowerMessage.includes('familia') || lowerMessage.includes('pareja') || lowerMessage.includes('amigos')) {
+      return "Las relaciones son fundamentales en nuestras vidas. ¿Cómo te sientes con respecto a tus relaciones en este momento?";
+    }
+    
+    if (lowerMessage.includes('trabajo') || lowerMessage.includes('estudio') || lowerMessage.includes('responsabilidades')) {
+      return "El trabajo y las responsabilidades pueden ser muy demandantes. ¿Cómo te está afectando esto en tu día a día?";
+    }
+    
+    // Default empathetic response
+    return "Gracias por compartir eso conmigo. Es importante poder expresar lo que sentimos. ¿Te gustaría contarme más sobre cómo te sientes?";
   }
 
   private async determineNextQuestion(userId: string): Promise<string | null> {
@@ -349,7 +390,7 @@ export class PsychologyAgent {
     this.resetSession(userId);
     // Also clear LangChain memory if available
     try {
-      langChainAgent.conversation.memoryManager.clearMemory(userId);
+      langChainAgent.clearMemory(userId);
     } catch (error) {
       console.error('Error clearing LangChain memory:', error);
     }

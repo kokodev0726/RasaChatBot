@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import https from "https";
+import http from "http";
 import fs from "fs";
 import path from "path";
 import { registerRoutes } from "./routes";
@@ -64,23 +65,57 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Load self-signed certificates
-  const keyPath = path.resolve(__dirname, "../certs/selfsigned.key");
-  const certPath = path.resolve(__dirname, "../certs/selfsigned.crt");
-
-  const httpsOptions = {
-    key: fs.readFileSync(keyPath),
-    cert: fs.readFileSync(certPath),
-  };
-
-  // ALWAYS serve the app on port 5005 with HTTPS
-  server.listen = https.createServer(httpsOptions, app).listen.bind(https.createServer(httpsOptions, app));
-
   const port = 5005;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-  }, () => {
-    log(`HTTPS Server listening on port ${port}`);
-  });
+  const isDevelopment = app.get("env") === "development";
+
+  if (isDevelopment) {
+    // Use HTTP in development mode
+    server.listen({
+      port,
+      host: "0.0.0.0",
+    }, () => {
+      log(`HTTP Server listening on port ${port} (development mode)`);
+    });
+  } else {
+    // Use HTTPS in production mode
+    try {
+      // Load self-signed certificates
+      const keyPath = path.resolve(__dirname, "../certs/selfsigned.key");
+      const certPath = path.resolve(__dirname, "../certs/selfsigned.crt");
+
+      // Check if certificates exist
+      if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+        log("Warning: SSL certificates not found. Using HTTP instead of HTTPS.");
+        server.listen({
+          port,
+          host: "0.0.0.0",
+        }, () => {
+          log(`HTTP Server listening on port ${port} (production mode - no SSL)`);
+        });
+        return;
+      }
+
+      const httpsOptions = {
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+      };
+
+      // Create HTTPS server
+      const httpsServer = https.createServer(httpsOptions, app);
+      httpsServer.listen({
+        port,
+        host: "0.0.0.0",
+      }, () => {
+        log(`HTTPS Server listening on port ${port} (production mode)`);
+      });
+    } catch (error) {
+      log(`Error setting up HTTPS: ${error}. Falling back to HTTP.`);
+      server.listen({
+        port,
+        host: "0.0.0.0",
+      }, () => {
+        log(`HTTP Server listening on port ${port} (fallback mode)`);
+      });
+    }
+  }
 })();

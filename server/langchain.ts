@@ -140,6 +140,10 @@ export class LangChainConversation {
       throw new Error('Failed to generate conversation response');
     }
   }
+
+  async clearMemory(userId: string): Promise<void> {
+    await this.memoryManager.clearMemory(userId);
+  }
 }
 
 // Advanced chains for specific tasks
@@ -627,6 +631,10 @@ export class LangChainAgent {
   
   async generateTitle(messages: string[]): Promise<string> {
     return await this.chains.generateChatTitle(messages);
+  }
+
+  async clearMemory(userId: string): Promise<void> {
+    await this.conversation.clearMemory(userId);
   }
 }
 

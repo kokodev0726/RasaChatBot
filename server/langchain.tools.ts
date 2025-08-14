@@ -189,6 +189,48 @@ export const sentimentAnalysisTool = new DynamicTool({
   },
 });
 
+// Tool for session management
+export const sessionManagementTool = new DynamicTool({
+  name: "session_management",
+  description: "Manage user sessions, track session numbers, and handle session transitions.",
+  func: async (input: string) => {
+    try {
+      // Expected format: "userId:action:value"
+      const [userId, action, value] = input.split(':');
+      
+      if (!userId || !action) {
+        return "Invalid format. Expected: userId:action:value";
+      }
+      
+      switch (action) {
+        case 'increment_session':
+          const currentSession = await storage.getUserContext(userId, 'sessionNumber');
+          const newSessionNumber = (parseInt(currentSession || '0') + 1).toString();
+          await storage.setUserContext(userId, 'sessionNumber', newSessionNumber);
+          return `Session number incremented to ${newSessionNumber}`;
+          
+        case 'get_session_number':
+          const sessionNumber = await storage.getUserContext(userId, 'sessionNumber');
+          return sessionNumber || '1';
+          
+        case 'set_session_data':
+          const [key, dataValue] = value.split('=');
+          if (key && dataValue) {
+            await storage.setUserContext(userId, key, dataValue);
+            return `Session data ${key} set to ${dataValue}`;
+          }
+          return "Invalid session data format";
+          
+        default:
+          return `Unknown action: ${action}`;
+      }
+    } catch (error) {
+      console.error('Error in session management:', error);
+      return "Error managing session.";
+    }
+  },
+});
+
 // Export all tools
 export const langChainTools: Tool[] = [
   getUserContextTool,
@@ -198,6 +240,7 @@ export const langChainTools: Tool[] = [
   generateSummaryTool,
   languageTool,
   sentimentAnalysisTool,
+  sessionManagementTool,
 ];
 
 // Tool executor utility

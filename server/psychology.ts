@@ -21,11 +21,22 @@ interface UserSession {
   userId: string;
   currentQuestionIndex: number;
   askedQuestions: string[];
-  userResponses: Array<{ question: string; response: string; timestamp: Date }>;
+  userResponses: Array<{ 
+    question: string; 
+    response: string; 
+    timestamp: Date;
+    nestedQuestionsAsked: number;
+    nestedQuestionsAnswered: number;
+  }>;
   sessionStartTime: Date;
   predefinedQuestions: string[];
   personalizedQuestions: string[];
-  hasGreeted?: boolean;
+  hasGreeted: boolean;
+  patientName: string | null;
+  isNewSession: boolean;
+  currentMainQuestion: string | null;
+  nestedQuestionCount: number;
+  sessionNumber: number;
 }
 
 export class PsychologyAgent {
@@ -38,6 +49,14 @@ export class PsychologyAgent {
       const predefinedQuestions = await storage.getPsychologyQuestions();
       const questionTexts = predefinedQuestions.map(q => q.question);
       
+      // Check if this is a new session or continuing
+      const userContexts = await storage.getAllUserContext(userId);
+      const patientName = userContexts.find(ctx => ctx.key === 'name')?.value || null;
+      
+      // Get current session number from storage
+      const currentSessionNumber = await toolExecutor.executeTool('session_management', `${userId}:get_session_number:`);
+      const sessionNumber = parseInt(currentSessionNumber);
+      
       this.userSessions.set(userId, {
         userId,
         currentQuestionIndex: 0,
@@ -46,7 +65,12 @@ export class PsychologyAgent {
         sessionStartTime: new Date(),
         predefinedQuestions: questionTexts,
         personalizedQuestions: [],
-        hasGreeted: false
+        hasGreeted: false,
+        patientName,
+        isNewSession: true,
+        currentMainQuestion: null,
+        nestedQuestionCount: 0,
+        sessionNumber: sessionNumber
       });
     }
     return this.userSessions.get(userId)!;
@@ -70,6 +94,8 @@ export class PsychologyAgent {
       const question = session.predefinedQuestions[session.currentQuestionIndex];
       session.currentQuestionIndex++;
       session.askedQuestions.push(question);
+      session.currentMainQuestion = question;
+      session.nestedQuestionCount = 0;
       return question;
     }
     
@@ -79,13 +105,36 @@ export class PsychologyAgent {
   async* processMessage(userId: string, message: string, chatId?: number): AsyncGenerator<string> {
     const session = await this.getOrCreateSession(userId);
     
+    // Extract user information using LangChain
+    try {
+      const extractedInfo = await langChainChains.extractUserInfo(message);
+      for (const [key, value] of Object.entries(extractedInfo)) {
+        if (value && value.trim()) {
+          await storage.setUserContext(userId, key, value);
+          if (key === 'name' && !session.patientName) {
+            session.patientName = value;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting user info:', error);
+    }
+
+    // Handle greetings and session initialization
+    if (session.isNewSession) {
+      yield* this.handleNewSession(userId, message);
+      return;
+    }
+
     // Store user response if it's a response to a question
     if (session.askedQuestions.length > 0 && session.askedQuestions.length > session.userResponses.length) {
       const lastQuestion = session.askedQuestions[session.askedQuestions.length - 1];
       session.userResponses.push({
         question: lastQuestion,
         response: message,
-        timestamp: new Date()
+        timestamp: new Date(),
+        nestedQuestionsAsked: session.nestedQuestionCount,
+        nestedQuestionsAnswered: 0
       });
     }
 
@@ -144,18 +193,6 @@ export class PsychologyAgent {
       }
     }
 
-    // Extract user information using LangChain
-    try {
-      const extractedInfo = await langChainChains.extractUserInfo(message);
-      for (const [key, value] of Object.entries(extractedInfo)) {
-        if (value && value.trim()) {
-          await storage.setUserContext(userId, key, value);
-        }
-      }
-    } catch (error) {
-      console.error('Error extracting user info:', error);
-    }
-
     // Get context from LangChain agent for better understanding
     let contextSnippets = '';
     try {
@@ -202,7 +239,7 @@ export class PsychologyAgent {
       // Mark that initial greeting/response has been sent
       session.hasGreeted = true;
 
-      // Determine next question only after the user has answered at least one prior question
+      // Determine next question based on nested questioning strategy
       if (session.userResponses.length > 0) {
         const nextQuestion = await this.determineNextQuestion(userId);
         if (nextQuestion) {
@@ -230,6 +267,91 @@ export class PsychologyAgent {
       } else {
         yield "Lo siento, estoy teniendo dificultades técnicas en este momento. ¿Podrías intentar de nuevo en unos momentos?";
       }
+    }
+  }
+
+  private async* handleNewSession(userId: string, message: string): AsyncGenerator<string> {
+    const session = await this.getOrCreateSession(userId);
+    
+    // Increment session number for returning users
+    if (session.sessionNumber > 1) {
+      await toolExecutor.executeTool('session_management', `${userId}:increment_session:`);
+    }
+    
+    // Check if user has a name stored
+    if (session.patientName) {
+      // Greet by name and provide session summary
+      const greeting = await this.generateSessionGreeting(userId);
+      yield greeting;
+    } else {
+      // Ask for name if not known
+      const nameRequest = "¡Hola! Soy tu psicólogo virtual. Antes de comenzar, ¿podrías decirme tu nombre?";
+      yield nameRequest;
+      
+      // Extract name from response
+      const nameMatch = message.match(/(?:me llamo|soy|mi nombre es)\s+(\w+)/i);
+      if (nameMatch) {
+        const name = nameMatch[1];
+        await storage.setUserContext(userId, 'name', name);
+        session.patientName = name;
+        
+        // Now provide proper greeting
+        const greeting = await this.generateSessionGreeting(userId);
+        yield '\n\n' + greeting;
+      }
+    }
+    
+    session.isNewSession = false;
+  }
+
+  private async generateSessionGreeting(userId: string): Promise<string> {
+    const session = await this.getOrCreateSession(userId);
+    
+    // Get current session number
+    const currentSessionNumber = await toolExecutor.executeTool('session_management', `${userId}:get_session_number:`);
+    const sessionNumber = parseInt(currentSessionNumber);
+    
+    // Get previous session summary
+    const previousSessions = await this.getPreviousSessionSummary(userId);
+    
+    let greeting = `¡Hola ${session.patientName || 'amigo/a'}! Me alegra verte de nuevo. `;
+    
+    if (previousSessions && sessionNumber > 1) {
+      greeting += `En nuestra sesión anterior hablamos sobre ${previousSessions}. ¿Te gustaría agregar algo relevante sobre esa conversación o hay algo nuevo que te gustaría explorar hoy?`;
+    } else {
+      greeting += `¿Cómo te sientes hoy? ¿Hay algo específico en lo que te gustaría que trabajemos juntos?`;
+    }
+    
+    return greeting;
+  }
+
+  private async getPreviousSessionSummary(userId: string): Promise<string | null> {
+    try {
+      // Get recent chat history
+      const userChats = await storage.getUserChats(userId);
+      if (userChats.length < 2) return null;
+      
+      // Get the most recent chat
+      const recentChat = await storage.getChatWithMessages(userChats[0].id);
+      if (!recentChat || recentChat.messages.length === 0) return null;
+      
+      // Generate summary of the last session
+      const lastSessionMessages = recentChat.messages
+        .slice(-10) // Last 10 messages
+        .map(msg => `${msg.role}: ${msg.content}`)
+        .join('\n');
+      
+      const summaryPrompt = `Genera un resumen breve (2-3 frases) de la siguiente conversación terapéutica, enfocándote en los temas principales discutidos:
+
+${lastSessionMessages}
+
+Resumen:`;
+      
+      const response = await psychologyLLM.invoke(summaryPrompt);
+      return response.content as string;
+    } catch (error) {
+      console.error('Error generating session summary:', error);
+      return null;
     }
   }
 
@@ -265,6 +387,16 @@ export class PsychologyAgent {
   private async determineNextQuestion(userId: string): Promise<string | null> {
     const session = await this.getOrCreateSession(userId);
     
+    // Check if we need to ask nested questions for the current main question
+    if (session.currentMainQuestion && session.nestedQuestionCount < 2) {
+      const nestedQuestion = await this.generateNestedQuestion(userId, session.currentMainQuestion, session.userResponses[session.userResponses.length - 1]);
+      if (nestedQuestion) {
+        session.nestedQuestionCount++;
+        session.askedQuestions.push(nestedQuestion);
+        return nestedQuestion;
+      }
+    }
+    
     // Continue with predefined questions
     if (session.currentQuestionIndex < session.predefinedQuestions.length) {
       return await this.getNextPredefinedQuestion(userId);
@@ -276,6 +408,8 @@ export class PsychologyAgent {
       const question = unusedPersonalizedQuestions[0];
       await storage.markUserGeneratedQuestionAsUsed(question.id);
       session.askedQuestions.push(question.question);
+      session.currentMainQuestion = question.question;
+      session.nestedQuestionCount = 0;
       return question.question;
     }
     
@@ -285,6 +419,29 @@ export class PsychologyAgent {
     }
     
     return null;
+  }
+
+  private async generateNestedQuestion(userId: string, mainQuestion: string, lastResponse: any): Promise<string | null> {
+    try {
+      const nestedQuestionPrompt = `Basándote en la pregunta principal y la respuesta del usuario, genera una pregunta de seguimiento específica que profundice en el tema.
+
+Pregunta principal: "${mainQuestion}"
+Respuesta del usuario: "${lastResponse.response}"
+
+Genera una pregunta de seguimiento que:
+1. Se relacione directamente con lo que el usuario compartió
+2. Invite a reflexionar más profundamente
+3. Explore emociones, pensamientos o experiencias específicas
+4. Sea natural y fluida en la conversación
+
+Pregunta de seguimiento:`;
+
+      const response = await psychologyLLM.invoke(nestedQuestionPrompt);
+      return response.content as string;
+    } catch (error) {
+      console.error('Error generating nested question:', error);
+      return null;
+    }
   }
 
   private async generatePersonalizedQuestion(userId: string): Promise<string> {
@@ -315,6 +472,8 @@ export class PsychologyAgent {
     });
 
     session.askedQuestions.push(personalizedQuestion);
+    session.currentMainQuestion = personalizedQuestion;
+    session.nestedQuestionCount = 0;
     return personalizedQuestion;
   }
 

@@ -159,7 +159,7 @@ export default function MessageList({
           <div className="flex-1">
             <div className="bg-slate-100 dark:bg-slate-700 rounded-2xl rounded-tl-md p-4 max-w-3xl">
               <p className="text-slate-800 dark:text-white">
-                ¡Hola! Soy tu asistente de IA. Puedo ayudarte con tus preguntas. ¿Cómo puedo ayudarte hoy?
+                ¡Hola! Soy tu psicólogo virtual. Antes de comenzar, ¿podrías decirme tu nombre para poder conocerte mejor?
               </p>
             </div>
             <span className="text-xs text-slate-500 dark:text-slate-400 ml-4 mt-1 block">

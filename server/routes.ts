@@ -62,7 +62,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         title,
       });
 
-      res.json(chat);
+      // Create initial psychology greeting message
+      try {
+        const userId = req.user.id;
+        
+        // Check if user has a name stored
+        const userContexts = await storage.getAllUserContext(userId);
+        const patientName = userContexts.find(ctx => ctx.key === 'name')?.value;
+        
+        let initialGreeting;
+        if (patientName) {
+          // Greet returning user by name
+          initialGreeting = `¡Hola ${patientName}! Me alegra verte de nuevo. ¿Cómo te sientes hoy? ¿Hay algo específico en lo que te gustaría que trabajemos juntos?`;
+        } else {
+          // Ask for name if not known
+          initialGreeting = "¡Hola! Soy tu psicólogo virtual. Antes de comenzar, ¿podrías decirme tu nombre para poder conocerte mejor?";
+        }
+        
+        // Create the initial greeting message
+        await storage.createMessage({
+          chatId: chat.id,
+          userId: userId,
+          content: initialGreeting,
+          role: "assistant",
+        });
+        
+        // Get the updated chat with the initial message
+        const updatedChat = await storage.getChatWithMessages(chat.id);
+        res.json(updatedChat);
+      } catch (greetingError) {
+        console.error("Error creating initial greeting:", greetingError);
+        // If greeting creation fails, still return the chat
+        res.json(chat);
+      }
     } catch (error) {
       console.error("Error creating chat:", error);
       res.status(500).json({ message: "Failed to create chat" });

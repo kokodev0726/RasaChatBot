@@ -22,6 +22,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
+  // Initialize Psychology Agent
+  const psychologyAgent = new PsychologyAgent();
+
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -487,8 +490,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Psychology Agent routes
-  const psychologyAgent = new PsychologyAgent();
-
   // Psychology chat streaming - now uses integrated Psychology Agent
   app.post('/api/psychology/stream', isAuthenticated, async (req: any, res) => {
     try {
